@@ -11,7 +11,9 @@ import { VimController } from "./controller";
 import type { VimMode } from "./engine";
 import { type VimClipboard, vimLineIndex, vimPluginKey, vimStateField } from "./proseMirrorBuffer";
 
-export interface ComposerVimCallbacks {
+export interface ComposerVimOptions {
+  /** Typing `jk` quickly in Insert acts as Esc. */
+  jkEscape: boolean;
   /** Enter from Normal; true when the composer sent or otherwise used it. */
   onEnter(event: KeyboardEvent): boolean;
   /** `k` on the first screen line and `j` on the last, as ArrowUp and ArrowDown. */
@@ -35,6 +37,9 @@ declare module "@tiptap/core" {
     "composer-vim": ComposerVimStorage;
   }
 }
+
+/** Vim's default `timeoutlen`, the usual window for an `inoremap jk <Esc>`. */
+const JK_TIMEOUT_MS = 1000;
 
 const NAMED_KEYS: Record<string, string> = {
   Escape: "<Esc>",
@@ -152,18 +157,20 @@ export const ComposerVimExtension = Extension.create<Record<string, never>, Comp
 
 export class ComposerVim {
   readonly #editor: Editor;
-  readonly #callbacks: () => ComposerVimCallbacks;
+  readonly #options: () => ComposerVimOptions;
   readonly #storage: ComposerVimStorage;
   readonly #controller: VimController;
   #event: KeyboardEvent | null = null;
+  /** When Insert last typed a `j`, which a quick `k` turns into Esc. Any other key clears it. */
+  #typedJAt: number | null = null;
   #goalX: number | null = null;
   #lastYank: (VimClipboard & { flavors?: Readonly<Record<string, string>> }) | null = null;
   #pasteFlavors: Readonly<Record<string, string>> | undefined;
   dispatching = false;
 
-  constructor(editor: Editor, callbacks: () => ComposerVimCallbacks) {
+  constructor(editor: Editor, options: () => ComposerVimOptions) {
     this.#editor = editor;
-    this.#callbacks = callbacks;
+    this.#options = options;
     this.#storage = editor.storage["composer-vim"];
     this.#controller = new VimController({
       getState: () => editor.state,
@@ -178,15 +185,15 @@ export class ComposerVim {
       screenLine: (pos, direction, count, keepGoal) =>
         this.#screenLine(editor.view, pos, direction, count, keepGoal),
       history: (direction) => {
-        if (this.#event) this.#callbacks().onHistory(direction, this.#event);
+        if (this.#event) this.#options().onHistory(direction, this.#event);
       },
       writeClipboard: (clipboard) => {
-        const flavors = this.#callbacks().copy(clipboard.text);
+        const flavors = this.#options().copy(clipboard.text);
         this.#lastYank = flavors ? { ...clipboard, flavors } : clipboard;
       },
       readClipboard: () => this.#readClipboard(),
       insertMarkdown: (text) => this.#insertMarkdown(text),
-      parseMarkdown: (value) => this.#callbacks().parseMarkdown(value),
+      parseMarkdown: (value) => this.#options().parseMarkdown(value),
       beginUndoSession: () => {
         if (this.#storage.undoSession !== null) return;
         this.#storage.undoSession = Date.now();
@@ -215,7 +222,8 @@ export class ComposerVim {
    * left unprevented when an app shortcut should still run.
    */
   handleKeyDown(event: KeyboardEvent): boolean {
-    if (this.#controller.mode === "insert" || !this.#ownsKey(event)) return false;
+    if (!this.#ownsKey(event)) return false;
+    if (this.#controller.mode === "insert") return this.#jkEscape(event);
     const consume = () => {
       event.preventDefault();
       event.stopPropagation();
@@ -236,7 +244,7 @@ export class ComposerVim {
       }
       if (event.key === "Enter") {
         if (this.#controller.mode !== "normal") this.#controller.feed("<Esc>");
-        if (this.#callbacks().onEnter(event)) return consume();
+        if (this.#options().onEnter(event)) return consume();
         const plain = !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey;
         if (plain) this.#controller.feed("<CR>");
         return consume();
@@ -262,6 +270,33 @@ export class ComposerVim {
     } finally {
       this.#event = null;
     }
+  }
+
+  /**
+   * The `j` is typed as usual, so typing never waits on a mapping. A `k` right after it
+   * removes it, outside undo history, and leaves Insert as Esc would.
+   */
+  #jkEscape(event: KeyboardEvent): boolean {
+    const typedJAt = this.#typedJAt;
+    this.#typedJAt = null;
+    if (!this.#options().jkEscape || event.ctrlKey || event.metaKey || event.altKey) return false;
+    const { selection, doc } = this.#editor.state;
+    if (!selection.empty) return false;
+    const now = Date.now();
+    if (event.key === "j") {
+      this.#typedJAt = now;
+      return false;
+    }
+    const completes =
+      event.key === "k" &&
+      typedJAt !== null &&
+      now - typedJAt <= JK_TIMEOUT_MS &&
+      doc.textBetween(selection.head - 1, selection.head) === "j";
+    if (!completes) return false;
+    this.#controller.escapeAfterTyping("j");
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
   }
 
   /** Esc in Insert that no menu or suggestion claimed. */
@@ -293,7 +328,7 @@ export class ComposerVim {
   async #readClipboard(): Promise<VimClipboard | null> {
     let text: string | null = null;
     try {
-      text = await this.#callbacks().readClipboardText();
+      text = await this.#options().readClipboardText();
     } catch {
       text = null;
     }
@@ -360,11 +395,8 @@ export class ComposerVim {
 }
 
 /** Starts vim on an editor built with `ComposerVimExtension`; `detach` turns it off. */
-export function attachComposerVim(
-  editor: Editor,
-  callbacks: () => ComposerVimCallbacks,
-): ComposerVim {
-  const vim = new ComposerVim(editor, callbacks);
+export function attachComposerVim(editor: Editor, options: () => ComposerVimOptions): ComposerVim {
+  const vim = new ComposerVim(editor, options);
   editor.storage["composer-vim"].vim = vim;
   editor.view.dispatch(editor.state.tr.setMeta(vimPluginKey, { mode: "insert", visual: null }));
   return vim;

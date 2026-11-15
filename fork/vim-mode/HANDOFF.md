@@ -23,8 +23,11 @@ into `vim-mode` to continue there. Milestone 6 (the macOS build) is not done: it
   option), `contracts/src/settings.ts`, Settings row and search entry, `index.css`, user docs.
 - Tests: `vp test run apps/web/src/vim` (engine table, ProseMirror buffer on the real schema, and a
   browser file for focus, Esc order, IME, Enter, screen-line `j`/`k`, app ctrl keys, undo, clipboard).
-- Not built from the v1 list: `jk` as Esc (optional setting), `R`, registers, search, `ctrl+a/x`,
-  block visual, marks, macros, `:` commands. `3o` does not repeat the opened line.
+- `jk` as Esc is the `composerVimJkEscape` setting ("Leave Insert with jk", off by default). The `j`
+  types at once; a `k` within 1 second (vim's `timeoutlen`) removes it outside undo history and
+  acts as Esc.
+- Not built: `R`, registers, search, `ctrl+a/x`, block visual, marks, macros, `:` commands. `3o`
+  does not repeat the opened line.
 - `Y` is vim's `yy`, not Neovim's `y$`.
 
 Answers to the open questions below:

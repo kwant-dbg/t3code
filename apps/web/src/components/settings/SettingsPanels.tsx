@@ -538,6 +538,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Rich text composer"]
       : []),
     ...(settings.composerVimMode !== DEFAULT_UNIFIED_SETTINGS.composerVimMode ? ["Vim mode"] : []),
+    ...(settings.composerVimJkEscape !== DEFAULT_UNIFIED_SETTINGS.composerVimJkEscape
+      ? ["Leave Insert with jk"]
+      : []),
     ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? ["Send shortcut"] : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? ["Follow-up behavior"]
@@ -668,6 +671,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
       composerVimMode: DEFAULT_UNIFIED_SETTINGS.composerVimMode,
+      composerVimJkEscape: DEFAULT_UNIFIED_SETTINGS.composerVimJkEscape,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       toolCallVisibility: DEFAULT_UNIFIED_SETTINGS.toolCallVisibility,
@@ -1209,6 +1213,32 @@ export function ChatSettingsPanel() {
               checked={settings.composerVimMode}
               onCheckedChange={(checked) => updateSettings({ composerVimMode: Boolean(checked) })}
               aria-label="Vim mode"
+            />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("composer-vim-jk-escape")}
+          description="With Vim mode on, type j then k within a second to leave Insert mode, as Esc does."
+          resetAction={
+            settings.composerVimJkEscape !== DEFAULT_UNIFIED_SETTINGS.composerVimJkEscape ? (
+              <SettingResetButton
+                label="leave Insert with jk"
+                onClick={() =>
+                  updateSettings({
+                    composerVimJkEscape: DEFAULT_UNIFIED_SETTINGS.composerVimJkEscape,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.composerVimJkEscape}
+              disabled={!settings.composerVimMode}
+              onCheckedChange={(checked) =>
+                updateSettings({ composerVimJkEscape: Boolean(checked) })
+              }
+              aria-label="Leave Insert with jk"
             />
           }
         />

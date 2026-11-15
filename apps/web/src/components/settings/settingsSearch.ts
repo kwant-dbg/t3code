@@ -754,6 +754,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["vim vi modal normal insert visual keys hjkl editor composer keyboard"],
   },
   {
+    id: "composer-vim-jk-escape",
+    title: "Leave Insert with jk",
+    to: "/settings/chat",
+    searchTerms: ["vim jk escape esc insert normal mapping inoremap"],
+  },
+  {
     id: "send-shortcut",
     title: "Send shortcut",
     to: "/settings/chat",

@@ -24,12 +24,16 @@ vi.mock(import("../state/server"), async (original) => {
 
 const keysSent = (handler: ReturnType<typeof vi.fn>) => handler.mock.calls.map(([key]) => key);
 
+type CommandKeyHandler = NonNullable<ComposerPromptEditorProps["onCommandKeyDown"]>;
+
 function VimComposer({
   value,
   onCommandKeyDown,
+  jkEscape,
 }: {
   value: string;
-  onCommandKeyDown: NonNullable<ComposerPromptEditorProps["onCommandKeyDown"]>;
+  onCommandKeyDown: CommandKeyHandler;
+  jkEscape: boolean;
 }) {
   const [prompt, setPrompt] = useState({ value, cursor: value.length });
   return (
@@ -39,6 +43,7 @@ function VimComposer({
       cursor={prompt.cursor}
       richTextEnabled
       vimMode
+      vimJkEscape={jkEscape}
       contextRecords={new Map()}
       skills={[]}
       disabled={false}
@@ -57,13 +62,16 @@ function VimComposer({
 
 async function mountVim(
   value: string,
-  onCommandKeyDown: NonNullable<ComposerPromptEditorProps["onCommandKeyDown"]> = () => false,
-  container?: HTMLElement,
+  {
+    onCommandKeyDown = () => false,
+    container,
+    jkEscape = false,
+  }: { onCommandKeyDown?: CommandKeyHandler; container?: HTMLElement; jkEscape?: boolean } = {},
 ) {
   await using stack = new AsyncDisposableStack();
   const screen = stack.use(
     await render(
-      <VimComposer value={value} onCommandKeyDown={onCommandKeyDown} />,
+      <VimComposer value={value} onCommandKeyDown={onCommandKeyDown} jkEscape={jkEscape} />,
       container ? { container } : {},
     ),
   );
@@ -87,7 +95,7 @@ describe("composer vim mode", () => {
   it("leaves Esc to an open menu, then switches to Normal", async () => {
     let menuOpen = true;
     const onCommandKeyDown = vi.fn((key: string) => key === "Escape" && menuOpen);
-    await using screen = await mountVim("hello", onCommandKeyDown);
+    await using screen = await mountVim("hello", { onCommandKeyDown });
     expect(screen.mode()).toBe("insert");
 
     await userEvent.keyboard("{Escape}");
@@ -133,7 +141,7 @@ describe("composer vim mode", () => {
 
   it("sends with Enter from Normal and starts the next prompt in Insert", async () => {
     const onCommandKeyDown = vi.fn((key: string) => key === "Enter");
-    await using screen = await mountVim("- item", onCommandKeyDown);
+    await using screen = await mountVim("- item", { onCommandKeyDown });
     await userEvent.keyboard("{Escape}");
     expect(screen.mode()).toBe("normal");
     await userEvent.keyboard("{Enter}");
@@ -158,11 +166,10 @@ describe("composer vim mode", () => {
     const onCommandKeyDown = vi.fn(() => false);
     const container = document.createElement("div");
     container.style.width = "120px";
-    await using screen = await mountVim(
-      "one two three four five six seven eight nine ten",
+    await using screen = await mountVim("one two three four five six seven eight nine ten", {
       onCommandKeyDown,
       container,
-    );
+    });
     const { editor } = screen;
     await act(async () => {
       editor.commands.setTextSelection(1);
@@ -248,5 +255,42 @@ describe("composer vim mode", () => {
     await using screen = await mountVim("a **bold** c");
     await userEvent.keyboard("{Escape}0wdw");
     expect(screen.markdown()).toBe("a c");
+  });
+});
+
+describe("jk to leave Insert", () => {
+  it("takes back the j and leaves Insert, with no j for undo to restore", async () => {
+    await using screen = await mountVim("", { jkEscape: true });
+    await userEvent.keyboard("abjk");
+    expect(screen.markdown()).toBe("ab");
+    expect(screen.mode()).toBe("normal");
+    await userEvent.keyboard("u");
+    expect(screen.markdown()).toBe("");
+  });
+
+  it.each([
+    ["the setting is off", false, "jk"],
+    ["another key comes between", true, "jxk"],
+  ])("types every key when %s", async (_name, jkEscape, keys) => {
+    await using screen = await mountVim("", { jkEscape });
+    await userEvent.keyboard(keys);
+    expect(screen.markdown()).toBe(keys);
+    expect(screen.mode()).toBe("insert");
+  });
+
+  it("repeats the typed text with . but not the j", async () => {
+    await using screen = await mountVim("a\nb", { jkEscape: true });
+    await userEvent.keyboard("{Escape}ggA;jkj.");
+    expect(screen.markdown()).toBe("a;\nb;");
+  });
+
+  it("types a k that comes after vim's timeout", async () => {
+    await using screen = await mountVim("", { jkEscape: true });
+    using now = vi.spyOn(Date, "now").mockReturnValue(10_000);
+    await userEvent.keyboard("j");
+    now.mockReturnValue(11_001);
+    await userEvent.keyboard("k");
+    expect(screen.markdown()).toBe("jk");
+    expect(screen.mode()).toBe("insert");
   });
 });

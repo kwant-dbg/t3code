@@ -146,7 +146,7 @@ import type { ComposerDraftContextRecords } from "./composerContextPresentation"
 import {
   attachComposerVim,
   type ComposerVim,
-  type ComposerVimCallbacks,
+  type ComposerVimOptions,
   ComposerVimExtension,
 } from "~/vim/composerVim";
 import type { VimMode } from "~/vim/engine";
@@ -177,6 +177,8 @@ export interface ComposerPromptEditorProps {
   literalText?: boolean;
   /** Vim modal editing; ignored for literal text. */
   vimMode?: boolean;
+  /** Typing `jk` quickly in Insert acts as Esc. */
+  vimJkEscape?: boolean;
   onVimModeChange?: (mode: VimMode | null) => void;
   contextRecords: ComposerDraftContextRecords;
   buildContextClipboardFragment?:
@@ -946,6 +948,7 @@ function ComposerPromptEditorTiptapInner(
     richTextEnabled,
     literalText = false,
     vimMode = false,
+    vimJkEscape = false,
     onVimModeChange,
     contextRecords,
     buildContextClipboardFragment,
@@ -1539,7 +1542,8 @@ function ComposerPromptEditorTiptapInner(
     editor?.setEditable(!disabled);
   }, [disabled, editor]);
 
-  const readVimCallbacks = useStableCallback((): ComposerVimCallbacks => ({
+  const readVimOptions = useStableCallback((): ComposerVimOptions => ({
+    jkEscape: vimJkEscape,
     // A list item must not continue on Enter from Normal; only sending applies.
     onEnter: (event) => readCallbacks().onCommandKeyDown?.("Enter", event, true) ?? false,
     onHistory: (direction, event) => {
@@ -1565,7 +1569,7 @@ function ComposerPromptEditorTiptapInner(
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- attaches vim to the imperative Tiptap editor while the setting is on
   useLayoutEffect(() => {
     if (!editor || !vimMode || literalText) return;
-    const vim = attachComposerVim(editor, readVimCallbacks);
+    const vim = attachComposerVim(editor, readVimOptions);
     vimRef.current = vim;
     reportVimMode(vim.mode);
     const unsubscribe = vim.subscribe(() => reportVimMode(vim.mode));
@@ -1575,7 +1579,7 @@ function ComposerPromptEditorTiptapInner(
       vimRef.current = null;
       reportVimMode(null);
     };
-  }, [editor, vimMode, literalText, readVimCallbacks, reportVimMode]);
+  }, [editor, vimMode, literalText, readVimOptions, reportVimMode]);
 
   // Push attributes before layout measurements; Tiptap updates them later in a passive effect.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes DOM attributes into the ProseMirror view before layout measurements read them

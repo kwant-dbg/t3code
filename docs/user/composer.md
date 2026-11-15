@@ -45,7 +45,9 @@ thread, or send, so typing works as usual. Press `Esc` for Normal mode; the
 composer footer shows `NORMAL`. `Esc` first closes an open `/` or `@` menu or
 dismisses a suggested prompt. In Normal mode Enter still sends, and `k` on the
 first line or `j` on the last recalls sent prompts like `ArrowUp` and
-`ArrowDown`.
+`ArrowDown`. To leave Insert by typing `jk`, turn on **Leave Insert with jk**
+below the Vim mode setting; the `k` must follow the `j` within a second, so
+pause between them in a word like "Dijkstra".
 
 Normal mode has the usual motions (`hjkl`, words, `0 ^ $`, `gg G`, `f t ; ,`,
 `%`, `{ }`), the `d c y` operators with text objects for words, quotes,

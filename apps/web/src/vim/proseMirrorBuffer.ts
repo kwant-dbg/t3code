@@ -203,6 +203,14 @@ export class ProseMirrorVimBuffer implements VimBuffer<Slice> {
     });
   }
 
+  /** Removes text just typed before the caret, leaving nothing for undo to bring back. */
+  untype(length: number): void {
+    const tr = this.tr;
+    const head = tr.selection.head;
+    tr.delete(head - length, head).setMeta("addToHistory", false);
+    this.flush();
+  }
+
   /** Keys typed in Insert while a paste was still reading the clipboard. */
   typeText(text: string): void {
     this.tr.insertText(text);

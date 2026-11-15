@@ -3607,6 +3607,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     vimMode={
                       settings.composerVimMode && !isMobileViewport && !isSoftwareKeyboardOpen
                     }
+                    vimJkEscape={settings.composerVimJkEscape}
                     onVimModeChange={setVimMode}
                     isPathQueryActive={isPathQueryActiveStable}
                     value={activePendingProgress ? activePendingProgress.customAnswer : prompt}

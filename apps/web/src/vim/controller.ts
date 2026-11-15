@@ -55,6 +55,12 @@ export class VimController {
     this.#sync();
   }
 
+  /** `jk`: takes back the typed `j`, then leaves Insert like Esc. */
+  escapeAfterTyping(typed: string): void {
+    this.#buffer.untype(typed.length);
+    this.escape();
+  }
+
   enterInsert(): void {
     this.#engine.enterInsert();
     this.#sync();
