@@ -37,6 +37,31 @@ at the end, leave the block. **Backspace** at the start of a code block turns it
 back into plain lines. Choose the language in a code block's corner to change
 it. Very large code blocks are shown without syntax highlighting.
 
+## Vim mode
+
+Turn on **Settings → Chat → Vim mode** to edit prompts with vim keys on web and
+desktop. The composer is in Insert mode whenever you click into it, open a
+thread, or send, so typing works as usual. Press `Esc` for Normal mode; the
+composer footer shows `NORMAL`. `Esc` first closes an open `/` or `@` menu or
+dismisses a suggested prompt. In Normal mode Enter still sends, and `k` on the
+first line or `j` on the last recalls sent prompts like `ArrowUp` and
+`ArrowDown`.
+
+Normal mode has the usual motions (`hjkl`, words, `0 ^ $`, `gg G`, `f t ; ,`,
+`%`, `{ }`), the `d c y` operators with text objects for words, quotes,
+brackets and paragraphs, `x X r D C s S Y p P J ~`, `gu gU g~`, counts, `u` and
+`Ctrl+R`, `.` to repeat a change, and Visual mode with `v` and `V`. `j` and `k`
+move by wrapped line. `>` and `<` indent and outdent list items.
+
+Yanks, deletes and puts use the system clipboard, and a yanked line puts back
+as a new line. A file, skill or other chip counts as one character. Styled text
+stays styled in Normal and Visual mode, so motions and edits never land inside
+its Markdown markers. Each Normal command undoes as one step, and so does all
+the typing of one Insert session. Vim keeps only `Ctrl+R` and `Ctrl+[` for
+itself: `Cmd` shortcuts (`Ctrl` on Windows and Linux) and other Ctrl shortcuts
+you bind in Keybindings work in every mode. Vim mode is off on narrow mobile
+screens and while an on-screen keyboard is open.
+
 ## Attach files
 
 Attach up to 100 files per message. Each image can be up to 10 MiB, with at most

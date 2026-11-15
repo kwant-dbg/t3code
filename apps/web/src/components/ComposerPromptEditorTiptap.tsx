@@ -143,6 +143,15 @@ import {
   type ComposerAttachmentInsertion,
 } from "./composerAttachmentInsertion";
 import type { ComposerDraftContextRecords } from "./composerContextPresentation";
+import {
+  attachComposerVim,
+  type ComposerVim,
+  type ComposerVimCallbacks,
+  ComposerVimExtension,
+} from "~/vim/composerVim";
+import type { VimMode } from "~/vim/engine";
+import { vimHoldsMarkdownSource, vimPluginKey } from "~/vim/proseMirrorBuffer";
+import { writeTextToClipboard, readTextFromClipboard } from "~/hooks/useCopyToClipboard";
 
 export interface ComposerPromptEditorHandle {
   focus: () => void;
@@ -166,6 +175,9 @@ export interface ComposerPromptEditorProps {
   cursor: number;
   richTextEnabled?: boolean;
   literalText?: boolean;
+  /** Vim modal editing; ignored for literal text. */
+  vimMode?: boolean;
+  onVimModeChange?: (mode: VimMode | null) => void;
   contextRecords: ComposerDraftContextRecords;
   buildContextClipboardFragment?:
     | ((contextIds: ReadonlyArray<string>) => string | null)
@@ -842,9 +854,10 @@ function createComposerExtensions(richText: boolean) {
     ComposerCitationExtension,
     ComposerContextReferenceExtension,
     ComposerChipSelectionExtension,
+    ComposerVimExtension,
     ...(richText
       ? [
-          ComposerMarkdownSourceExtension,
+          ComposerMarkdownSourceExtension.configure({ holdReveal: vimHoldsMarkdownSource }),
           ComposerItalicExtension,
           ComposerBoldExtension,
           ComposerStrikeExtension,
@@ -932,6 +945,8 @@ function ComposerPromptEditorTiptapInner(
     cursor,
     richTextEnabled,
     literalText = false,
+    vimMode = false,
+    onVimModeChange,
     contextRecords,
     buildContextClipboardFragment,
     importContextFragment,
@@ -970,6 +985,7 @@ function ComposerPromptEditorTiptapInner(
     literalText ? position : expandCollapsedComposerCursor(text, position);
 
   const latestValueRef = useRef(value);
+  const vimRef = useRef<ComposerVim | null>(null);
   // The editor config is built once, so its handlers reach the current callbacks through here.
   const readCallbacks = useStableCallback(() => ({
     onChange,
@@ -1070,6 +1086,8 @@ function ComposerPromptEditorTiptapInner(
     const suppressTrigger =
       literalText ||
       inCodeBlock ||
+      // Moving through text in Normal mode is not typing a mention or command.
+      vimPluginKey.getState(updated.state)?.mode !== "insert" ||
       [updated.state.selection.$from.nodeBefore, updated.state.selection.$from.nodeAfter].some(
         (node) => node?.isInline && node.isAtom && !node.isText && node.type.name !== "hardBreak",
       );
@@ -1123,6 +1141,7 @@ function ComposerPromptEditorTiptapInner(
           // Composer commands keep precedence; otherwise true skips the editor's keymaps without
           // preventDefault, so a bound app command still runs.
           keydown: (_view, event) => {
+            if (vimRef.current?.handleKeyDown(event)) return true;
             if (!isRichTextFormattingShortcut(event)) return false;
             if (readCallbacks().onCommandKeyDown?.(event.key, event)) {
               event.preventDefault();
@@ -1346,13 +1365,12 @@ function ComposerPromptEditorTiptapInner(
               view.dispatch(tr.scrollIntoView());
             });
           }
-          if (!handler) return false;
-          const handled = handler(event.key, event);
+          const handled = handler?.(event.key, event) ?? false;
           if (handled) {
             event.preventDefault();
             event.stopPropagation();
           }
-          return handled;
+          return handled || (vimRef.current?.escapeInsert(event) ?? false);
         },
         handleTextInput: (view, from, to, text) => {
           if (literalText || view.composing || text.length !== 1) return false;
@@ -1520,6 +1538,44 @@ function ComposerPromptEditorTiptapInner(
   useEffect(() => {
     editor?.setEditable(!disabled);
   }, [disabled, editor]);
+
+  const readVimCallbacks = useStableCallback((): ComposerVimCallbacks => ({
+    // A list item must not continue on Enter from Normal; only sending applies.
+    onEnter: (event) => readCallbacks().onCommandKeyDown?.("Enter", event, true) ?? false,
+    onHistory: (direction, event) => {
+      readCallbacks().onCommandKeyDown?.(direction === -1 ? "ArrowUp" : "ArrowDown", event);
+    },
+    copy: (text) => {
+      const contextIds = literalText ? [] : [...new Set(collectInlineContextIds(text))];
+      const fragment = contextIds.length > 0 ? buildContextClipboardFragment?.(contextIds) : null;
+      const flavors = fragment ? { [COMPOSER_CONTEXT_CLIPBOARD_MIME]: fragment } : undefined;
+      void writeTextToClipboard(text, "composer text", flavors).catch(() => false);
+      return flavors;
+    },
+    readClipboardText: () => readTextFromClipboard("composer text"),
+    parseMarkdown: (markdown) =>
+      editor
+        ? editor.schema.nodeFromJSON(
+            buildDocJson(markdown, skillLabelFor, { styling: richText, literalText, isKnownModel }),
+          )
+        : null,
+  }));
+  const reportVimMode = useStableCallback((mode: VimMode | null) => onVimModeChange?.(mode));
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- attaches vim to the imperative Tiptap editor while the setting is on
+  useLayoutEffect(() => {
+    if (!editor || !vimMode || literalText) return;
+    const vim = attachComposerVim(editor, readVimCallbacks);
+    vimRef.current = vim;
+    reportVimMode(vim.mode);
+    const unsubscribe = vim.subscribe(() => reportVimMode(vim.mode));
+    return () => {
+      unsubscribe();
+      vim.detach();
+      vimRef.current = null;
+      reportVimMode(null);
+    };
+  }, [editor, vimMode, literalText, readVimCallbacks, reportVimMode]);
 
   // Push attributes before layout measurements; Tiptap updates them later in a passive effect.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- pushes DOM attributes into the ProseMirror view before layout measurements read them

@@ -8,6 +8,7 @@ export const COMPOSER_UNDO_GROUP_DELAY = 1000;
 export type ComposerChangeKind = "insert" | "delete" | "other";
 
 const CLIPBOARD_EDIT_META = "composerClipboardEdit";
+const UNDO_SESSION_META = "composerUndoSession";
 
 /**
  * Tag custom paste/cut dispatches; ProseMirror only tags its built-in paths.
@@ -15,6 +16,11 @@ const CLIPBOARD_EDIT_META = "composerClipboardEdit";
  */
 export function markAsClipboardEdit(tr: Transaction, event: "paste" | "cut"): Transaction {
   return tr.setMeta(CLIPBOARD_EDIT_META, event);
+}
+
+/** Edits stamped with one session's start time undo as one step, like vim's Insert session. */
+export function markUndoSession(tr: Transaction, startedAt: number): Transaction {
+  return tr.setMeta(UNDO_SESSION_META, true).setTime(startedAt);
 }
 
 function changeKindOf(tr: Transaction): ComposerChangeKind | null {
@@ -44,6 +50,7 @@ export function groupUndoByChangeKind(
   if (isHistoryTransaction(tr)) return "other";
   const kind = changeKindOf(tr);
   if (kind === null) return previous;
+  if (tr.getMeta(UNDO_SESSION_META)) return "other";
   if (previous !== null && (kind !== previous || kind === "other")) closeHistory(tr);
   return kind;
 }

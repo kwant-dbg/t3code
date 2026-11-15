@@ -537,6 +537,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.composerRichTextEnabled !== DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled
       ? ["Rich text composer"]
       : []),
+    ...(settings.composerVimMode !== DEFAULT_UNIFIED_SETTINGS.composerVimMode ? ["Vim mode"] : []),
     ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? ["Send shortcut"] : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? ["Follow-up behavior"]
@@ -666,6 +667,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
+      composerVimMode: DEFAULT_UNIFIED_SETTINGS.composerVimMode,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       toolCallVisibility: DEFAULT_UNIFIED_SETTINGS.toolCallVisibility,
@@ -1186,6 +1188,27 @@ export function ChatSettingsPanel() {
                 updateSettings({ composerRichTextEnabled: Boolean(checked) })
               }
               aria-label="Rich text composer"
+            />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("composer-vim-mode")}
+          description="Edit prompts with vim keys. Esc switches to Normal mode; the composer starts in Insert."
+          resetAction={
+            settings.composerVimMode !== DEFAULT_UNIFIED_SETTINGS.composerVimMode ? (
+              <SettingResetButton
+                label="vim mode"
+                onClick={() =>
+                  updateSettings({ composerVimMode: DEFAULT_UNIFIED_SETTINGS.composerVimMode })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.composerVimMode}
+              onCheckedChange={(checked) => updateSettings({ composerVimMode: Boolean(checked) })}
+              aria-label="Vim mode"
             />
           }
         />

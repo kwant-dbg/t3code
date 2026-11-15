@@ -9,6 +9,7 @@ import {
   type ComposerChangeKind,
   groupUndoByChangeKind,
   markAsClipboardEdit,
+  markUndoSession,
 } from "./composer-undo-grouping";
 
 const schema = getSchema([StarterKit]);
@@ -16,6 +17,7 @@ const schema = getSchema([StarterKit]);
 function composer(text = "") {
   let clock = 0;
   let previous: ComposerChangeKind | null = null;
+  let session: number | null = null;
   let state = EditorState.create({
     schema,
     doc: schema.node("doc", null, [
@@ -25,6 +27,7 @@ function composer(text = "") {
   });
   const dispatch = (tr: Transaction) => {
     tr.setTime(clock);
+    if (session !== null && tr.docChanged) markUndoSession(tr, session);
     previous = groupUndoByChangeKind(tr, previous);
     state = state.apply(tr);
   };
@@ -32,6 +35,8 @@ function composer(text = "") {
   const api = {
     text: () => state.doc.textContent,
     wait: (ms: number) => ((clock += ms), api),
+    session: () => ((session = clock), api),
+    endSession: () => ((session = null), api),
     type: (s: string, gap = 80) => {
       for (const ch of s) {
         clock += gap;
@@ -114,6 +119,22 @@ describe("composer undo grouping", () => {
     expect(editor.undo().text()).toBe("hello w");
     expect(editor.undo().text()).toBe("hello worl");
     expect(editor.undo().text()).toBe("hello world");
+  });
+
+  it("keeps an undo session as one step through pauses, deletions and pastes", () => {
+    // History reads a zero time as no previous step.
+    const editor = composer("x ")
+      .wait(1)
+      .session()
+      .type("one")
+      .wait(COMPOSER_UNDO_GROUP_DELAY * 5)
+      .backspace(1)
+      .paste("pasted")
+      .endSession()
+      .type(" after");
+    expect(editor.text()).toBe("x onpasted after");
+    expect(editor.undo().text()).toBe("x onpasted");
+    expect(editor.undo().text()).toBe("x ");
   });
 
   it("keeps IME composition as one run of typing", () => {

@@ -8,6 +8,38 @@ agent can pick it up. That overrides the "do not commit plans" default in `AGENT
 folder (`fork/`). Everything else in `AGENTS.md` still applies, especially "The three ways to hurt
 yourself" (never write to `~/.t3/userdata`, never kill processes by pattern).
 
+## Status (2026-11-15)
+
+Milestones 2–5 are built on branch `claude/beautiful-edison-ay87md` (based on `vim-mode`). Merge it
+into `vim-mode` to continue there. Milestone 6 (the macOS build) is not done: it needs a Mac.
+
+- Code is in `apps/web/src/vim/`: `engine.ts` (pure modal engine), `motions.ts`, `text.ts`,
+  `proseMirrorBuffer.ts` (vim lines ↔ document, edits, yank/put, undo), `controller.ts` (one
+  transaction per command), `composerVim.ts` (Tiptap extension, keys, block cursor, clipboard), and
+  `ComposerVimModeLabel.tsx`.
+- Upstream files touched, kept small: `ComposerPromptEditorTiptap.tsx` (extension, two key hooks,
+  attach effect, trigger suppression), `ChatComposer.tsx` (prop and footer label),
+  `composer-undo-grouping.ts` (`markUndoSession`), `composer-markdown-source.ts` (`holdReveal`
+  option), `contracts/src/settings.ts`, Settings row and search entry, `index.css`, user docs.
+- Tests: `vp test run apps/web/src/vim` (engine table, ProseMirror buffer on the real schema, and a
+  browser file for focus, Esc order, IME, Enter, screen-line `j`/`k`, app ctrl keys, undo, clipboard).
+- Not built from the v1 list: `jk` as Esc (optional setting), `R`, registers, search, `ctrl+a/x`,
+  block visual, marks, macros, `:` commands. `3o` does not repeat the opened line.
+- `Y` is vim's `yy`, not Neovim's `y$`.
+
+Answers to the open questions below:
+
+- Block cursor: a decoration, with the native caret made transparent. No reliance on `caret-shape`.
+- Clipboard read on desktop: the main window sets no permission handler (only the preview browser
+  session does), so Electron's default allows `readText`; the terminal already pastes this way. If a
+  read fails, `p` falls back to the last yank.
+- Shown Markdown delimiters: Normal and Visual mode do not reveal Markdown source at all
+  (`holdReveal`), so motions and edits work on rendered text and never split a delimiter. Insert mode
+  reveals as before. A change (`cw`, `ciw`, `s`) types with the style of the text it replaced.
+- `ctrl+r` and `ctrl+[`: an app binding on either key wins over vim (off macOS, `ctrl+[` is the
+  default back shortcut). The owner's `~/.t3/userdata/keybindings.json` was not checked from the
+  cloud session; check it on the Mac.
+
 ## Goal
 
 Vim-style modal editing inside the chat composer (the message box), built into the existing Tiptap
@@ -18,13 +50,13 @@ summarised at the end and is out of scope for the first milestone.
 
 ## Decisions already made by the owner
 
-| Topic | Decision |
-|---|---|
-| Approach | Vim built into the composer editor, not an external editor handoff |
+| Topic                | Decision                                                                        |
+| -------------------- | ------------------------------------------------------------------------------- |
+| Approach             | Vim built into the composer editor, not an external editor handoff              |
 | Enter in Normal mode | Sends the message, same as Enter in Insert (honours the `sendShortcut` setting) |
-| `j` / `k` | Move by **screen line** (wrapped lines), like `gj`/`gk` in vim |
-| `y` / `p` | Use the **system clipboard** (like `set clipboard=unnamedplus`) |
-| Where | Branch `vim-mode` on this fork; `main` stays a clean mirror of upstream |
+| `j` / `k`            | Move by **screen line** (wrapped lines), like `gj`/`gk` in vim                  |
+| `y` / `p`            | Use the **system clipboard** (like `set clipboard=unnamedplus`)                 |
+| Where                | Branch `vim-mode` on this fork; `main` stays a clean mirror of upstream         |
 
 ## Defaults chosen by the planner (owner may change)
 
@@ -43,8 +75,8 @@ summarised at the end and is out of scope for the first milestone.
 
 ### Modes
 
-- **Insert.** Today's behaviour, unchanged. `Esc` switches to Normal *only if nothing else claims
-  it* (see the Esc order below).
+- **Insert.** Today's behaviour, unchanged. `Esc` switches to Normal _only if nothing else claims
+  it_ (see the Esc order below).
 - **Normal.** Block cursor, a small `NORMAL` label in the composer footer. Unmodified printable
   keys never insert text. Unknown keys are swallowed (no typing leaks).
 - **Visual** (`v`) and **Visual line** (`V`). The selection is the editor's real selection, so
@@ -81,18 +113,18 @@ Practical hook: the editor forwards Escape to the composer handler at the end of
 
 ## Keymap — version 1
 
-| Group | Keys |
-|---|---|
-| Enter Insert | `i a I A o O s S C cc` (and `c{motion}`) |
-| Motions | `h l` (char), `j k` (screen line), `w b e W B E`, `0 ^ $`, `gg G`, `f F t T ; ,`, `%`, `{ }` |
-| Operators | `d c y`, `>` / `<` (list indent/outdent), `~`, `gu`, `gU` |
-| Text objects | `iw aw iW aW`, `i" a" i' a' i\` a\``, `i( a( i) a) i[ a[ i{ a{ i< a<`, `ip ap` |
-| Edits | `x X r{c} D Y p P J dd yy` |
-| Undo | `u`, `ctrl+r` |
-| Counts | Everywhere vim allows, e.g. `3w`, `2dd`, `d3w` |
-| Repeat | `.` repeats the last change, including text typed in the Insert session it opened |
-| Visual | `v`, `V`, `o` (swap end), then `d c y > < ~ u U p` |
-| History | `k` on the first screen line / `j` on the last → previous / next prompt (same as ArrowUp/Down today) |
+| Group        | Keys                                                                                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| Enter Insert | `i a I A o O s S C cc` (and `c{motion}`)                                                             |
+| Motions      | `h l` (char), `j k` (screen line), `w b e W B E`, `0 ^ $`, `gg G`, `f F t T ; ,`, `%`, `{ }`         |
+| Operators    | `d c y`, `>` / `<` (list indent/outdent), `~`, `gu`, `gU`                                            |
+| Text objects | `iw aw iW aW`, `i" a" i' a' i\` a\``, `i( a( i) a) i[ a[ i{ a{ i< a<`, `ip ap`                       |
+| Edits        | `x X r{c} D Y p P J dd yy`                                                                           |
+| Undo         | `u`, `ctrl+r`                                                                                        |
+| Counts       | Everywhere vim allows, e.g. `3w`, `2dd`, `d3w`                                                       |
+| Repeat       | `.` repeats the last change, including text typed in the Insert session it opened                    |
+| Visual       | `v`, `V`, `o` (swap end), then `d c y > < ~ u U p`                                                   |
+| History      | `k` on the first screen line / `j` on the last → previous / next prompt (same as ArrowUp/Down today) |
 
 Later (not v1): named registers (`"a`), `/` and `?` search in the prompt, `R` replace mode,
 `ctrl+a` / `ctrl+x`, `ctrl+v` block visual, marks, macros, `:` commands.
@@ -127,26 +159,26 @@ Later (not v1): named registers (`"a`), `/` and `?` search in the prompt, `R` re
 
 ## Code map
 
-| What | Where |
-|---|---|
-| Composer editor (Tiptap): extensions list, `editorProps.handleKeyDown`, `handleDOMEvents.keydown`, chip nodes, Enter/Tab handling | `apps/web/src/components/ComposerPromptEditorTiptap.tsx` (`createComposerExtensions`, `handleKeyDown`) |
-| Composer key policy: Esc for menus and suggestions, arrows for menu and prompt history, send, list edits | `apps/web/src/components/chat/composerCommandKey.ts` (`composerCommandKeyHandler`, `navigatePromptHistory`) |
-| Wiring of that handler and settings into the editor | `apps/web/src/components/chat/ChatComposer.tsx` (`onComposerCommandKey`) |
-| "Caret on first/last visual line" helper (reuse for `j`/`k` → history) | `isCaretOnVisualEdge` on `ComposerPromptEditorHandle` in `ComposerPromptEditorTiptap.tsx` |
-| Screen-line caret moves already done with `Selection.modify` | Top of `handleKeyDown` in `ComposerPromptEditorTiptap.tsx` (`lineboundary` / `documentboundary`) |
-| Prompt string model where each chip is 1 char ("collapsed cursor") | `apps/web/src/composer-logic.ts` (`expandCollapsedComposerCursor`, `collapseExpandedComposerCursor`) |
-| Undo grouping | `apps/web/src/composer-undo-grouping.ts` |
-| Rich-text Markdown source mark | `apps/web/src/composer-rich-text.ts` |
-| Paste import (chips round-trip) | `apps/web/src/components/composerInlineTokenPaste.ts` |
-| Dictation Esc | `apps/web/src/speech/useDictationShortcut.ts` |
-| App keybinding dispatch | `apps/web/src/shortcuts/dispatcher.ts`, `apps/web/src/keybindings.ts`, `packages/shared/src/keybindingMatching.ts` |
-| Client setting schema (add `composerVimMode` next to `composerRichTextEnabled` and `sendShortcut`) | `packages/contracts/src/settings.ts` |
-| Settings UI row (next to the `composer-rich-text` row, "Composer" section) | `apps/web/src/components/settings/SettingsPanels.tsx` |
-| Existing composer tests to extend | `apps/web/src/components/ComposerPromptEditorTiptap.input.browser.test.tsx` and others beside the composer files |
-| User docs to update when shipped | `docs/user/composer.md`, `docs/user/keybindings.md` |
+| What                                                                                                                              | Where                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Composer editor (Tiptap): extensions list, `editorProps.handleKeyDown`, `handleDOMEvents.keydown`, chip nodes, Enter/Tab handling | `apps/web/src/components/ComposerPromptEditorTiptap.tsx` (`createComposerExtensions`, `handleKeyDown`)             |
+| Composer key policy: Esc for menus and suggestions, arrows for menu and prompt history, send, list edits                          | `apps/web/src/components/chat/composerCommandKey.ts` (`composerCommandKeyHandler`, `navigatePromptHistory`)        |
+| Wiring of that handler and settings into the editor                                                                               | `apps/web/src/components/chat/ChatComposer.tsx` (`onComposerCommandKey`)                                           |
+| "Caret on first/last visual line" helper (reuse for `j`/`k` → history)                                                            | `isCaretOnVisualEdge` on `ComposerPromptEditorHandle` in `ComposerPromptEditorTiptap.tsx`                          |
+| Screen-line caret moves already done with `Selection.modify`                                                                      | Top of `handleKeyDown` in `ComposerPromptEditorTiptap.tsx` (`lineboundary` / `documentboundary`)                   |
+| Prompt string model where each chip is 1 char ("collapsed cursor")                                                                | `apps/web/src/composer-logic.ts` (`expandCollapsedComposerCursor`, `collapseExpandedComposerCursor`)               |
+| Undo grouping                                                                                                                     | `apps/web/src/composer-undo-grouping.ts`                                                                           |
+| Rich-text Markdown source mark                                                                                                    | `apps/web/src/composer-rich-text.ts`                                                                               |
+| Paste import (chips round-trip)                                                                                                   | `apps/web/src/components/composerInlineTokenPaste.ts`                                                              |
+| Dictation Esc                                                                                                                     | `apps/web/src/speech/useDictationShortcut.ts`                                                                      |
+| App keybinding dispatch                                                                                                           | `apps/web/src/shortcuts/dispatcher.ts`, `apps/web/src/keybindings.ts`, `packages/shared/src/keybindingMatching.ts` |
+| Client setting schema (add `composerVimMode` next to `composerRichTextEnabled` and `sendShortcut`)                                | `packages/contracts/src/settings.ts`                                                                               |
+| Settings UI row (next to the `composer-rich-text` row, "Composer" section)                                                        | `apps/web/src/components/settings/SettingsPanels.tsx`                                                              |
+| Existing composer tests to extend                                                                                                 | `apps/web/src/components/ComposerPromptEditorTiptap.input.browser.test.tsx` and others beside the composer files   |
+| User docs to update when shipped                                                                                                  | `docs/user/composer.md`, `docs/user/keybindings.md`                                                                |
 
 **ProseMirror ordering note.** Props passed directly to the view (Tiptap `editorProps`) run before
-plugin props. A vim plugin's `handleKeyDown` would therefore run *after* the composer's own
+plugin props. A vim plugin's `handleKeyDown` would therefore run _after_ the composer's own
 `editorProps.handleKeyDown`, which already handles Enter, Tab and so on. Hook vim at the top of
 `editorProps.handleKeyDown`, or in `handleDOMEvents.keydown`, so it sees keys first in Normal and
 Visual. In Insert it should only watch for Esc (and the optional `jk`).

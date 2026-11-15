@@ -46,6 +46,11 @@ model search. Right at the end of the search moves to the highlighted model's ef
 levels, and Left comes back. Choosing a model keeps the picker open on its effort. `mod+shift+up` and `mod+shift+down` switch providers directly and clear the
 search. These provider shortcuts can also be changed in Settings.
 
+With **Settings → Chat → Vim mode** on, `Esc` in the composer switches to vim's
+Normal mode once no menu or suggestion claims it. A binding of yours on `Ctrl+R`
+or `Ctrl+[` takes priority over vim's redo and Esc. See
+[Vim mode](./composer.md#vim-mode).
+
 These shortcuts run inside the focused web or desktop client. `mod` uses Command
 on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
