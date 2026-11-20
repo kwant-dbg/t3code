@@ -247,6 +247,11 @@ function mapSelection(tr: Transaction, selection: Selection, map: (pos: number) 
   return TextSelection.create(tr.doc, map(selection.anchor), map(selection.head));
 }
 
+/** Parses all shown source back into styles, in place. */
+export function collapseAllMarkdownSource(tr: Transaction): void {
+  collapseMarkdownSource(tr);
+}
+
 /** Parses all shown source first, so a command that splits it keeps its styles. */
 export const collapseShownMarkdownSource: Command = ({ tr }) => {
   const { selection } = tr;
@@ -310,12 +315,16 @@ function revealStyledText(tr: Transaction, type: MarkType, typed: boolean, takes
 }
 
 /** Shows styled text the selection touches as Markdown, and parses source it left. */
-function normalizeMarkdownSource(state: EditorState, typed: boolean): Transaction | null {
+function normalizeMarkdownSource(
+  state: EditorState,
+  typed: boolean,
+  held: boolean,
+): Transaction | null {
   const type = state.schema.marks[MARKDOWN_SOURCE_MARK];
   if (!type) return null;
   const tr = state.tr;
-  collapseMarkdownSource(tr, (region) => touches(state.selection, region));
-  revealStyledText(tr, type, typed, caretTakesMarksBefore(state));
+  collapseMarkdownSource(tr, (region) => !held && touches(state.selection, region));
+  if (!held) revealStyledText(tr, type, typed, caretTakesMarksBefore(state));
   return tr.docChanged ? tr : null;
 }
 
@@ -325,16 +334,20 @@ function normalizeMarkdownSource(state: EditorState, typed: boolean): Transactio
  * rewrites stay out of it and only remove text they added: source the history
  * knows is hidden instead of parsed, and source revealed here is parsed back.
  */
-function normalizeDetached(state: EditorState, revealed: TextRange[]): Transaction | null {
+function normalizeDetached(
+  state: EditorState,
+  revealed: TextRange[],
+  held: boolean,
+): Transaction | null {
   const type = state.schema.marks[MARKDOWN_SOURCE_MARK];
   if (!type) return null;
   const tr = state.tr;
   const kept: TextRange[] = [];
   for (const region of revealed.toSorted((left, right) => right.from - left.from)) {
-    if (touches(state.selection, region)) kept.push(region);
+    if (!held && touches(state.selection, region)) kept.push(region);
     else collapseRegion(tr, region, type);
   }
-  const added = revealStyledText(tr, type, false, caretTakesMarksBefore(state));
+  const added = held ? [] : revealStyledText(tr, type, false, caretTakesMarksBefore(state));
   if (!tr.docChanged) return null;
   const shown = [...kept.map((region) => mapRange(tr.mapping, region)), ...added];
   return tr.setMeta(markdownSourceKey, shown).setMeta("addToHistory", false);
@@ -439,7 +452,10 @@ type MarkdownSourceState = {
 
 const markdownSourceKey = new PluginKey<MarkdownSourceState>("composer-markdown-source");
 
-function markdownSourcePlugin(type: MarkType): Plugin<MarkdownSourceState> {
+function markdownSourcePlugin(
+  type: MarkType,
+  holdReveal: (state: EditorState) => boolean,
+): Plugin<MarkdownSourceState> {
   let view: EditorView | null = null;
   return new Plugin<MarkdownSourceState>({
     key: markdownSourceKey,
@@ -495,10 +511,12 @@ function markdownSourcePlugin(type: MarkType): Plugin<MarkdownSourceState> {
       }
       if (!transactions.some((tr) => tr.docChanged || tr.selectionSet)) return null;
       const source = markdownSourceKey.getState(state);
-      if (source?.detached) return normalizeDetached(state, source.revealed);
+      const held = holdReveal(state);
+      if (source?.detached) return normalizeDetached(state, source.revealed, held);
       const tr = normalizeMarkdownSource(
         state,
         transactions.some((item) => item.docChanged),
+        held,
       );
       // With nothing to undo, a recorded rewrite would only add a no-op undo.
       if (tr && undoDepth(state) === 0) tr.setMeta("addToHistory", false);
@@ -507,9 +525,15 @@ function markdownSourcePlugin(type: MarkType): Plugin<MarkdownSourceState> {
   });
 }
 
+interface MarkdownSourceOptions {
+  /** While true, styled text stays rendered under the selection, as in vim's Normal mode. */
+  holdReveal: (state: EditorState) => boolean;
+}
+
 /** Keeps source `normalizeDetached` revealed out of what undo, redo and edits see. */
-const MarkdownSourceHistoryExtension = Extension.create({
+const MarkdownSourceHistoryExtension = Extension.create<MarkdownSourceOptions>({
   name: "composer-markdown-source-history",
+  addOptions: () => ({ holdReveal: () => false }),
   // Runs after undo grouping, so a rebased edit keeps the grouping chosen for it.
   priority: 1,
   dispatchTransaction({ transaction, next }) {
@@ -526,7 +550,11 @@ const MarkdownSourceHistoryExtension = Extension.create({
       const source = markdownSourceKey.getState(editor.state);
       const tr = editor.view.composing
         ? null
-        : normalizeDetached(editor.state, source?.revealed ?? []);
+        : normalizeDetached(
+            editor.state,
+            source?.revealed ?? [],
+            this.options.holdReveal(editor.state),
+          );
       if (tr) next(tr);
       return;
     }
@@ -542,8 +570,9 @@ const MarkdownSourceHistoryExtension = Extension.create({
   },
 });
 
-export const ComposerMarkdownSourceExtension = TiptapMark.create({
+export const ComposerMarkdownSourceExtension = TiptapMark.create<MarkdownSourceOptions>({
   name: MARKDOWN_SOURCE_MARK,
+  addOptions: () => ({ holdReveal: () => false }),
   // Its shortcuts run ahead of the style marks' own.
   priority: 1001,
   inclusive: false,
@@ -585,9 +614,9 @@ export const ComposerMarkdownSourceExtension = TiptapMark.create({
     };
   },
   addExtensions() {
-    return [MarkdownSourceHistoryExtension];
+    return [MarkdownSourceHistoryExtension.configure({ holdReveal: this.options.holdReveal })];
   },
   addProseMirrorPlugins() {
-    return [markdownSourcePlugin(this.type), replayPlugin];
+    return [markdownSourcePlugin(this.type, this.options.holdReveal), replayPlugin];
   },
 });

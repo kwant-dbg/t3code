@@ -576,6 +576,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut
       ? [gt("Send shortcut")]
       : []),
+    ...(settings.vimMode !== DEFAULT_UNIFIED_SETTINGS.vimMode ? [gt("Vim mode")] : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? [gt("Follow-up behavior")]
       : []),
@@ -708,6 +709,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
+      vimMode: DEFAULT_UNIFIED_SETTINGS.vimMode,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       toolCallVisibility: DEFAULT_UNIFIED_SETTINGS.toolCallVisibility,
@@ -1251,6 +1253,25 @@ export function ChatSettingsPanel() {
                 updateSettings({ composerRichTextEnabled: Boolean(checked) })
               }
               aria-label={gt("Rich text composer")}
+            />
+          }
+        />
+        <SettingsRow
+          {...setting("vim-mode")}
+          description={gt("Edit prompts and other text boxes with vim keys.")}
+          resetAction={
+            settings.vimMode !== DEFAULT_UNIFIED_SETTINGS.vimMode ? (
+              <SettingResetButton
+                ariaLabel={gt("Reset vim mode to default")}
+                onClick={() => updateSettings({ vimMode: DEFAULT_UNIFIED_SETTINGS.vimMode })}
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.vimMode}
+              onCheckedChange={(checked) => updateSettings({ vimMode: Boolean(checked) })}
+              aria-label={gt("Vim mode")}
             />
           }
         />

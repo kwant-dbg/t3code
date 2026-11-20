@@ -9,6 +9,14 @@ Don't style a raw `<button>`, `<input>`, `<select>`, or `<textarea>` to look lik
 primitive provides. Raw elements are right when the element isn't that control: semantic rows, tabs,
 resize handles, swatches, editor surfaces, anything whose behavior or geometry differs by design.
 
+## Text boxes and vim mode
+
+With vim mode on, a document listener gives every writable `<textarea>` vim keys, so new text
+boxes get them without wiring. A textarea that forwards keys instead of holding text, like the
+browser preview's input, must set `data-vim="off"`; the terminal is skipped by its `.xterm` root.
+The composer is a Tiptap editor with its own adapter. Both load from
+[`apps/web/src/vim`](../../apps/web/src/vim) only when the setting is on.
+
 ## Styles
 
 Style with Tailwind classes in the component that renders the element.

@@ -37,6 +37,44 @@ at the end, leave the block. **Backspace** at the start of a code block turns it
 back into plain lines. Choose the language in a code block's corner to change
 it. Very large code blocks are shown without syntax highlighting.
 
+## Vim mode
+
+Turn on **Settings → Chat → Vim mode** to write with vim keys on web and
+desktop. It works in the composer and in every other multi-line text box, such
+as commit messages, pull request descriptions and review comments. A text box
+is in Insert mode whenever you click into it, open a thread, or send, so typing
+works as usual. Press `Esc` for Normal mode; the composer footer, or the corner
+of other text boxes, shows `NORMAL`. In the composer, `Esc` first closes an open
+`/` or `@` menu or dismisses a suggested prompt.
+
+Normal mode has the usual motions (`hjkl`, words, `0 ^ $`, `gg G`, `f t ; ,`,
+`%`, `{ }`), `/`, `?`, `n`, `N`, `*` and `#` to search, the `d c y` operators
+with text objects for words, quotes, brackets and paragraphs,
+`x X r R D C s S Y p P J ~`, `gu gU g~`, `Ctrl+A` and `Ctrl+X` on numbers, counts,
+`u` and `Ctrl+R`, `.` to repeat a change, and Visual mode with `v`, `V` and `gv`.
+`j` and `k` move by wrapped line; `0`, `^` and `$` work on the whole line. `>`
+and `<` indent and outdent list items. Search patterns use vim's syntax, so
+`\|` means "or" and `\c` ignores case. Marks, macros, `:` commands and block
+Visual mode are not supported.
+
+Yanks, deletes and puts use the system clipboard, and a yanked line puts back
+as a new line. `"a` to `"z` keep text inside T3 Code without touching the
+clipboard (`"A` adds to `"a`), `"0` holds the last yank, and `"_` discards. A
+file, skill or other chip counts as one character. Styled text stays styled in
+Normal and Visual mode, so motions and edits never land inside its Markdown
+markers. Each Normal command undoes as one step, and so does all the typing of
+one Insert session.
+
+Enter in Normal mode does what it does while typing: it sends from the
+composer, and saves or submits where a text box does that; elsewhere it moves
+down a line. A second `Esc` in Normal mode does nothing, so it never closes a
+dialog with your draft in it; `Tab` leaves the text box. Vim
+keeps only `Ctrl+R`, `Ctrl+A`, `Ctrl+X` and `Ctrl+[` for itself: `Cmd`
+shortcuts (`Ctrl` on Windows and Linux) and Ctrl shortcuts you bind in
+Keybindings work in every mode. The terminal and the browser preview keep every
+key. Vim mode is off on narrow mobile screens, while an on-screen keyboard is
+open, and in the mobile app.
+
 ## Attach files
 
 Attach up to 100 files per message. Each image can be up to 10 MiB, with at most

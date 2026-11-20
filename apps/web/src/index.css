@@ -2545,6 +2545,77 @@ code {
   pointer-events: none;
 }
 
+/* Vim mode draws a block cursor in Normal and Visual, so the native caret hides. */
+.composer-tiptap[data-vim-mode="normal"],
+.composer-tiptap[data-vim-mode="visual"],
+.composer-tiptap[data-vim-mode="visual-line"] {
+  caret-color: transparent;
+}
+
+.composer-tiptap.ProseMirror-focused .composer-vim-cursor {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.composer-tiptap:not(.ProseMirror-focused) .composer-vim-cursor {
+  outline: 1px solid var(--muted-foreground);
+  outline-offset: -1px;
+}
+
+.composer-tiptap .composer-vim-cursor-chip {
+  outline: 2px solid var(--foreground);
+  outline-offset: -1px;
+  border-radius: 6px;
+}
+
+/* At a line end the cursor sits on no character; it takes no width so the line never rewraps. */
+.composer-tiptap .composer-vim-cursor-eol {
+  position: relative;
+}
+
+.composer-tiptap .composer-vim-cursor-eol::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0.6em;
+  pointer-events: none;
+}
+
+.composer-tiptap.ProseMirror-focused .composer-vim-cursor-eol::before {
+  background: var(--foreground);
+}
+
+.composer-tiptap:not(.ProseMirror-focused) .composer-vim-cursor-eol::before {
+  outline: 1px solid var(--muted-foreground);
+  outline-offset: -1px;
+}
+
+/* Vim mode in text boxes: a block cursor in Normal, vim's underline in Replace. */
+textarea[data-vim-mode="normal"] {
+  caret-shape: block;
+}
+
+textarea[data-vim-mode="replace"] {
+  caret-shape: underscore;
+}
+
+.vim-textarea-status {
+  position: fixed;
+  z-index: 200;
+  transform: translate(-100%, -100%);
+  pointer-events: none;
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--popover);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  line-height: 1rem;
+  white-space: pre;
+}
+
 /* Rich-text task lists render as real checkboxes. Tiptap's TaskItem NodeView
    builds the <li> imperatively with only a data-checked attribute (no
    data-type), so items are targeted that way. Indentation comes from list
