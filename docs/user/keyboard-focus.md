@@ -44,8 +44,8 @@ composer in Insert mode.
 
 - **Areas:** `Ctrl+W` then `h`, `j`, `k` or `l` moves to the area to the left,
   below, above or right, as between vim windows. It works from a text box in
-  Normal mode too. `Ctrl+\` `Ctrl+N` leaves the terminal or a browser page, which
-  otherwise keep every key.
+  Normal mode too. The terminal keeps every key; `Ctrl+\` `Ctrl+N` leaves
+  it. A browser page also keeps every key; leave it with `Shift+Escape`.
 - **Lists** (threads, Settings sections, menus, pickers): `j` and `k` move, `gg`
   and `G` go to the ends, `Ctrl+D` and `Ctrl+U` move half a page, `l` opens or
   expands and `h` collapses. In the sidebar, `r` renames, `dd` archives (asking
