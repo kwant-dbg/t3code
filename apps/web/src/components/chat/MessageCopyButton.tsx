@@ -41,6 +41,8 @@ export const MessageCopyButton = memo(function MessageCopyButton({
         render={
           <Button
             aria-label={label}
+            // Vim mode's `y y` copies the message under its cursor with this button.
+            data-message-copy=""
             disabled={isCopied}
             onClick={() => copyToClipboard(text)}
             ref={ref}

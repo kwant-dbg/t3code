@@ -1,4 +1,5 @@
 import { surfaceShortcutKey } from "~/lib/surfaceShortcutKey";
+import { isVimModeOn } from "~/vim/vimKeybindings";
 
 export const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
   "input",
@@ -84,6 +85,8 @@ export function shouldRedirectInputToComposer(event: Event): boolean {
 
 export function shouldTypeToFocusComposer(event: KeyboardEvent): boolean {
   if (event.isComposing) return false;
+  // In vim mode a key outside a text box is a command; `i` goes to the composer.
+  if (isVimModeOn()) return false;
   if (event.metaKey || event.ctrlKey || event.altKey) return false;
   if (event.key.length !== 1) return false;
   if (!shouldRedirectInputToComposer(event)) return false;

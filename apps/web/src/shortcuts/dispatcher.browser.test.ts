@@ -1,7 +1,16 @@
 import type { KeybindingCommand, ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { compileResolvedKeybindingsConfig } from "@t3tools/shared/keybindings";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import { dispatchMenuAction, registerCommands, registerMenuAction } from "./dispatcher";
+import { fakeTimers } from "../../test/render";
+
+import {
+  dispatchMenuAction,
+  getPendingKeySequence,
+  registerCommandRunner,
+  registerCommands,
+  registerMenuAction,
+} from "./dispatcher";
 
 function bindings(entries: ReadonlyArray<[string, KeybindingCommand]>): ResolvedKeybindingsConfig {
   return entries.map(([key, command]) => ({
@@ -143,5 +152,101 @@ describe("command dispatcher", () => {
 
     expect(newer).toHaveBeenCalledOnce();
     expect(older).toHaveBeenCalledOnce();
+  });
+});
+
+describe("key sequences", () => {
+  const sequences = () =>
+    compileResolvedKeybindingsConfig([
+      { key: "g g", command: "chat.new" },
+      { key: "space t", command: "chat.newLocal" },
+      { key: "k", command: "chat.find" },
+      { key: "k j", command: "chat.newWithoutProject" },
+    ]);
+  const pendingKeys = () => getPendingKeySequence()?.typed.map((step) => step.key) ?? null;
+
+  it("runs a command once its keys come in order, listing what may follow meanwhile", () => {
+    const first = vi.fn();
+    using stack = new DisposableStack();
+    stack.defer(registerCommands({ "chat.new": first }, { keybindings: sequences }));
+
+    expect(press("g").defaultPrevented).toBe(true);
+    expect(pendingKeys()).toEqual(["g"]);
+    expect(getPendingKeySequence()?.next.map((next) => next.command)).toEqual(["chat.new"]);
+    expect(first).not.toHaveBeenCalled();
+
+    press("g");
+    expect(first).toHaveBeenCalledOnce();
+    expect(getPendingKeySequence()).toBeNull();
+  });
+
+  it("drops the keys typed so far after a second, as vim's timeoutlen does", () => {
+    const first = vi.fn();
+    using _clock = fakeTimers();
+    using stack = new DisposableStack();
+    stack.defer(registerCommands({ "chat.new": first }, { keybindings: sequences }));
+
+    press("g");
+    vi.advanceTimersByTime(1000);
+    expect(getPendingKeySequence()).toBeNull();
+    press("g");
+    expect(first).not.toHaveBeenCalled();
+    expect(pendingKeys()).toEqual(["g"]);
+    press("Escape");
+  });
+
+  it("cancels on Esc, and lets a key that continues nothing go on as usual", () => {
+    using stack = new DisposableStack();
+    stack.defer(
+      registerCommands(
+        { "chat.new": vi.fn(), "chat.newLocal": vi.fn() },
+        { keybindings: sequences },
+      ),
+    );
+
+    press("g");
+    expect(press("Escape").defaultPrevented).toBe(true);
+    expect(getPendingKeySequence()).toBeNull();
+
+    press(" ");
+    expect(press("x").defaultPrevented).toBe(false);
+    expect(getPendingKeySequence()).toBeNull();
+  });
+
+  it("never starts on a key that already runs a command, or while typing in a field", () => {
+    const find = vi.fn();
+    const later = vi.fn();
+    using stack = new DisposableStack();
+    stack.defer(
+      registerCommands(
+        { "chat.find": find, "chat.newWithoutProject": later, "chat.new": vi.fn() },
+        { keybindings: sequences },
+      ),
+    );
+
+    press("k");
+    expect(find).toHaveBeenCalledOnce();
+    expect(getPendingKeySequence()).toBeNull();
+
+    const input = document.createElement("input");
+    document.body.append(input);
+    stack.defer(() => input.remove());
+    input.focus();
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "g", bubbles: true, cancelable: true }),
+    );
+    expect(getPendingKeySequence()).toBeNull();
+  });
+
+  it("runs a command a component handles with its own listener", () => {
+    const run = vi.fn(() => true);
+    using stack = new DisposableStack();
+    // A scope gives the sequence its rules; the runner owns the command.
+    stack.defer(registerCommands({}, { keybindings: sequences }));
+    stack.defer(registerCommandRunner({ has: (command) => command === "chat.newLocal", run }));
+
+    press(" ");
+    press("t");
+    expect(run).toHaveBeenCalledWith("chat.newLocal", expect.any(KeyboardEvent));
   });
 });

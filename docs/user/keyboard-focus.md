@@ -35,3 +35,37 @@ keys to move through it, Enter to choose, and Escape to close it.
 
 The Settings section list works the same way: Tab moves through each section, Up and Down
 also move between sections without opening them, and Enter opens one.
+
+## Move around with vim keys
+
+With **Settings → Chat → Vim mode** on, keys pressed outside a text box are
+vim commands instead of typing into the composer. `i` or `a` returns to the
+composer in Insert mode.
+
+- **Areas:** `Ctrl+W` then `h`, `j`, `k` or `l` moves to the area to the left,
+  below, above or right, as between vim windows. It works from a text box in
+  Normal mode too. `Ctrl+\` `Ctrl+N` leaves the terminal or a browser page, which
+  otherwise keep every key.
+- **Lists** (threads, Settings sections, menus, pickers): `j` and `k` move, `gg`
+  and `G` go to the ends, `Ctrl+D` and `Ctrl+U` move half a page, `l` opens or
+  expands and `h` collapses. In the sidebar, `r` renames, `dd` archives (asking
+  first if **Settings → General → Archive confirmation** is on), `yy` copies the thread's link and
+  `/` searches. In a picker's search box, `Ctrl+N` and `Ctrl+P` move the
+  highlight.
+- **Conversation:** `j` and `k` move a cursor between messages, `[[` and `]]`
+  between your prompts, `gg` and `G` to the first and last. `Enter` or `za`
+  expands the work under the cursor and `yy` copies the message. `Ctrl+E`,
+  `Ctrl+Y`, `Ctrl+D` and `Ctrl+U` scroll. `/` finds in the thread; `n` and `N`
+  move between matches.
+- **Right panel:** in a diff or file, `j`, `k`, `gg` and `G` scroll, `]f` and
+  `[f` move between files, `]c` and `[c` between changes, and `za` folds a file.
+  `gt` and `gT` switch tabs and `q` closes one.
+- **Anywhere:** `:` opens the command palette, `Ctrl+O` and `Ctrl+I` go back and
+  forward, and `?` lists every vim key as you have it bound. `f` labels each
+  visible control; type a label to click it, or use `F` to focus it instead.
+  `space` starts a shortcut: `space t` terminal, `space d` diff, `space p`
+  preview, `space b` sidebar, `space m` model, `space e` effort, `space n` new
+  thread.
+
+All of these are keybindings you can change in **Settings → Keybindings**; see
+[Vim keys](./keybindings.md#vim-keys).

@@ -2,6 +2,7 @@ import {
   type KeybindingRule,
   type KeybindingShortcut,
   type KeybindingWhenNode,
+  MAX_KEYBINDING_SEQUENCE_STEPS,
   MAX_KEYBINDINGS_COUNT,
   MAX_WHEN_EXPRESSION_DEPTH,
   MODEL_PICKER_JUMP_KEYBINDING_COMMANDS,
@@ -150,6 +151,122 @@ export const DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
   { key: "mod+shift+4", command: "usage.period.quarter", when: "usagePageOpen" },
 ];
 
+const VIM_LEADER_BINDINGS = [
+  ["t", "terminal.toggle"],
+  ["d", "diff.toggle"],
+  ["p", "preview.toggle"],
+  ["b", "sidebar.toggle"],
+  ["m", "modelPicker.toggle"],
+  ["e", "composer.effort"],
+  ["n", "chat.new"],
+] as const;
+
+/** App Normal mode: vim is on and no text box has focus. `area` narrows it to one place. */
+const vimApp = (area?: string) =>
+  area ? `vimNormal && !editableFocus && ${area}` : "vimNormal && !editableFocus";
+
+/**
+ * Vim mode's app keys. Clients add them under the user's rules only while vim mode is on, and
+ * they are never written to keybindings.json: that file and the wire keep the 256-rule cap
+ * for the user's own rules. A user's own rules for a command replace these for it.
+ */
+export const VIM_DEFAULT_KEYBINDINGS: ReadonlyArray<KeybindingRule> = [
+  // Also from a text box in Normal mode, as vim's window moves are.
+  { key: "ctrl+w h", command: "workspace.focusLeft", when: "vimNormal" },
+  { key: "ctrl+w j", command: "workspace.focusDown", when: "vimNormal" },
+  { key: "ctrl+w k", command: "workspace.focusUp", when: "vimNormal" },
+  { key: "ctrl+w l", command: "workspace.focusRight", when: "vimNormal" },
+  {
+    key: "ctrl+\\ ctrl+n",
+    command: "workspace.leaveTerminal",
+    when: "vimMode && (terminalFocus || previewFocus)",
+  },
+  { key: "i", command: "composer.focus", when: vimApp() },
+  { key: "a", command: "composer.focus", when: vimApp() },
+  { key: "shift+;", command: "commandPalette.toggle", when: vimApp() },
+  { key: "shift+/", command: "keybindings.cheatSheet", when: vimApp() },
+  { key: "f", command: "hints.click", when: vimApp() },
+  { key: "shift+f", command: "hints.focus", when: vimApp() },
+  { key: "ctrl+o", command: "navigation.back", when: vimApp() },
+  { key: "ctrl+i", command: "navigation.forward", when: vimApp() },
+  { key: "g t", command: "rightPanel.nextTab", when: vimApp() },
+  { key: "g shift+t", command: "rightPanel.previousTab", when: vimApp() },
+  ...VIM_LEADER_BINDINGS.map(([key, command]) => ({
+    key: `space ${key}`,
+    command,
+    when: vimApp(),
+  })),
+  { key: "ctrl+e", command: "scroll.lineDown", when: vimApp("!listFocus") },
+  { key: "ctrl+y", command: "scroll.lineUp", when: vimApp("!listFocus") },
+  { key: "ctrl+d", command: "scroll.halfPageDown", when: vimApp("!listFocus") },
+  { key: "ctrl+u", command: "scroll.halfPageUp", when: vimApp("!listFocus") },
+  // The diff and file views in the right panel.
+  { key: "j", command: "scroll.lineDown", when: vimApp("rightPanelFocus && !listFocus") },
+  { key: "k", command: "scroll.lineUp", when: vimApp("rightPanelFocus && !listFocus") },
+  { key: "g g", command: "scroll.top", when: vimApp("rightPanelFocus && !listFocus") },
+  { key: "shift+g", command: "scroll.bottom", when: vimApp("rightPanelFocus && !listFocus") },
+  { key: "] c", command: "diff.nextHunk", when: vimApp("rightPanelFocus") },
+  { key: "[ c", command: "diff.previousHunk", when: vimApp("rightPanelFocus") },
+  { key: "] f", command: "diff.nextFile", when: vimApp("rightPanelFocus") },
+  { key: "[ f", command: "diff.previousFile", when: vimApp("rightPanelFocus") },
+  { key: "z a", command: "diff.toggleFile", when: vimApp("rightPanelFocus") },
+  { key: "q", command: "rightPanel.close", when: vimApp("rightPanelFocus") },
+  // A cursor that moves between messages.
+  { key: "j", command: "conversation.next", when: vimApp("conversationFocus") },
+  { key: "k", command: "conversation.previous", when: vimApp("conversationFocus") },
+  { key: "] ]", command: "conversation.nextPrompt", when: vimApp("conversationFocus") },
+  { key: "[ [", command: "conversation.previousPrompt", when: vimApp("conversationFocus") },
+  { key: "g g", command: "conversation.first", when: vimApp("conversationFocus") },
+  { key: "shift+g", command: "conversation.last", when: vimApp("conversationFocus") },
+  { key: "enter", command: "conversation.toggle", when: vimApp("conversationFocus") },
+  { key: "z a", command: "conversation.toggle", when: vimApp("conversationFocus") },
+  { key: "y y", command: "conversation.copy", when: vimApp("conversationFocus") },
+  { key: "/", command: "chat.find", when: vimApp("conversationFocus") },
+  { key: "n", command: "chat.findNext", when: vimApp("conversationFocus") },
+  { key: "shift+n", command: "chat.findPrevious", when: vimApp("conversationFocus") },
+  // Lists: sidebar threads, Settings sections, menus, the pull request list.
+  { key: "j", command: "list.next", when: vimApp("listFocus") },
+  { key: "k", command: "list.previous", when: vimApp("listFocus") },
+  { key: "g g", command: "list.first", when: vimApp("listFocus") },
+  { key: "shift+g", command: "list.last", when: vimApp("listFocus") },
+  { key: "ctrl+d", command: "list.pageDown", when: vimApp("listFocus") },
+  { key: "ctrl+u", command: "list.pageUp", when: vimApp("listFocus") },
+  { key: "l", command: "list.open", when: vimApp("listFocus") },
+  { key: "h", command: "list.close", when: vimApp("listFocus") },
+  { key: "r", command: "sidebar.renameThread", when: vimApp("sidebarFocus") },
+  { key: "d d", command: "sidebar.archiveThread", when: vimApp("sidebarFocus") },
+  { key: "y y", command: "sidebar.copyThreadReference", when: vimApp("sidebarFocus") },
+  { key: "/", command: "sidebar.search", when: vimApp("sidebarFocus") },
+  // Pickers keep focus in their search box, so these work while typing in it.
+  { key: "ctrl+n", command: "list.next", when: "vimMode && popupOpen" },
+  { key: "ctrl+p", command: "list.previous", when: "vimMode && popupOpen" },
+];
+
+function rulesByCommand(rules: ResolvedKeybindingsConfig): Map<string, string> {
+  const byCommand = new Map<string, string[]>();
+  for (const rule of rules) {
+    const entry = JSON.stringify([rule.sequence ?? rule.shortcut, rule.whenAst ?? null]);
+    byCommand.set(rule.command, [...(byCommand.get(rule.command) ?? []), entry]);
+  }
+  return new Map([...byCommand].map(([command, entries]) => [command, entries.sort().join("\n")]));
+}
+
+/**
+ * Vim's rules under the given ones, so those win a shared key. A command whose rules differ
+ * from the app's defaults is the user's own, and vim's rules for it are left out.
+ */
+export function mergeVimKeybindings(
+  vimDefaults: ResolvedKeybindingsConfig,
+  keybindings: ResolvedKeybindingsConfig,
+  appDefaults: ResolvedKeybindingsConfig = DEFAULT_RESOLVED_KEYBINDINGS,
+): ResolvedKeybindingsConfig {
+  const current = rulesByCommand(keybindings);
+  const defaults = rulesByCommand(appDefaults);
+  const customized = (command: string) =>
+    current.has(command) && current.get(command) !== defaults.get(command);
+  return [...vimDefaults.filter((binding) => !customized(binding.command)), ...keybindings];
+}
+
 function normalizeKeyToken(token: string): string {
   if (token === "space") return " ";
   if (token === "esc") return "escape";
@@ -218,6 +335,25 @@ export function parseKeybindingShortcut(value: string): KeybindingShortcut | nul
     altKey,
     modKey,
   };
+}
+
+/**
+ * A binding's keys: one shortcut, or a sequence whose steps are separated by spaces, such as
+ * `g g`, `space t` or `ctrl+w h`. Spaces around `+` stay inside a step: `mod + k` is one key.
+ */
+export function parseKeybindingSequence(value: string): KeybindingShortcut[] | null {
+  const steps = value
+    .trim()
+    .replace(/\s*\+\s*/g, "+")
+    .split(/\s+/);
+  if (steps.length > MAX_KEYBINDING_SEQUENCE_STEPS) return null;
+  const shortcuts: KeybindingShortcut[] = [];
+  for (const step of steps) {
+    const shortcut = parseKeybindingShortcut(step);
+    if (!shortcut) return null;
+    shortcuts.push(shortcut);
+  }
+  return shortcuts;
 }
 
 function tokenizeWhenExpression(expression: string): WhenToken[] | null {
@@ -355,23 +491,37 @@ export function parseKeybindingWhenExpression(expression: string): KeybindingWhe
 }
 
 export function compileResolvedKeybindingRule(rule: KeybindingRule): ResolvedKeybindingRule | null {
-  const shortcut = parseKeybindingShortcut(rule.key);
-  if (!shortcut) return null;
+  const steps = parseKeybindingSequence(rule.key);
+  if (!steps) return null;
+  const [first] = steps;
+  if (!first) return null;
+  const keys =
+    steps.length === 1
+      ? { shortcut: first }
+      : {
+          // Spaces never appear in a key a keypress produces, so this shortcut matches nothing.
+          shortcut: {
+            key: rule.key
+              .trim()
+              .toLowerCase()
+              .replace(/\s*\+\s*/g, "+")
+              .replace(/\s+/g, " "),
+            metaKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+            altKey: false,
+            modKey: false,
+          },
+          sequence: steps,
+        };
 
   if (rule.when !== undefined) {
     const whenAst = parseKeybindingWhenExpression(rule.when);
     if (!whenAst) return null;
-    return {
-      command: rule.command,
-      shortcut,
-      whenAst,
-    };
+    return { command: rule.command, ...keys, whenAst };
   }
 
-  return {
-    command: rule.command,
-    shortcut,
-  };
+  return { command: rule.command, ...keys };
 }
 
 export function compileResolvedKeybindingsConfig(

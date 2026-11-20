@@ -13,6 +13,7 @@ import {
 } from "@t3tools/contracts";
 import {
   effectiveShortcutsForCommand,
+  formatBindingLabel,
   formatShortcutLabel,
   isRichTextBoldShortcut,
   isSidebarToggleShortcut,
@@ -20,6 +21,7 @@ import {
   isTerminalSplitShortcut,
   resolveChatShortcutCommand,
   resolveShortcutCommand,
+  resolveShortcutSequence,
   shouldShowThreadJumpHintsForModifiers,
   shortcutLabelForCommand,
   terminalNavigationShortcutData,
@@ -1010,5 +1012,78 @@ describe("Usage shortcuts", () => {
         platform: "Linux",
       }),
     );
+  });
+});
+
+describe("resolveShortcutSequence", () => {
+  const rules = compileResolvedKeybindingsConfig([
+    { key: "g g", command: "list.first", when: "listFocus" },
+    { key: "g g", command: "conversation.first", when: "conversationFocus" },
+    { key: "g t", command: "rightPanel.nextTab" },
+    { key: "space t", command: "terminal.toggle" },
+    { key: "ctrl+w h", command: "workspace.focusLeft" },
+  ]);
+  const keys = (...events: Array<Partial<ShortcutEventLike>>) => events.map((e) => event(e));
+
+  it("waits after the first key and lists what may follow", () => {
+    const match = resolveShortcutSequence(keys({ key: "g" }), rules, {
+      context: { listFocus: true },
+    });
+    assert.deepEqual(
+      match?.type === "partial" ? match.next.map((next) => [next.step.key, next.command]) : null,
+      [
+        ["t", "rightPanel.nextTab"],
+        ["g", "list.first"],
+      ],
+    );
+  });
+
+  it("completes by the when-clause of the place in focus", () => {
+    const gg = keys({ key: "g" }, { key: "g" });
+    assert.deepEqual(resolveShortcutSequence(gg, rules, { context: { listFocus: true } }), {
+      type: "complete",
+      command: "list.first",
+    });
+    assert.deepEqual(resolveShortcutSequence(gg, rules, { context: { conversationFocus: true } }), {
+      type: "complete",
+      command: "conversation.first",
+    });
+    assert.equal(resolveShortcutSequence(gg, rules, { context: {} }), null);
+  });
+
+  it("matches modified steps and the space leader", () => {
+    assert.deepEqual(
+      resolveShortcutSequence(keys({ key: "w", ctrlKey: true }, { key: "h" }), rules, {
+        platform: "MacIntel",
+      }),
+      { type: "complete", command: "workspace.focusLeft" },
+    );
+    assert.deepEqual(resolveShortcutSequence(keys({ key: " " }, { key: "t" }), rules), {
+      type: "complete",
+      command: "terminal.toggle",
+    });
+    assert.equal(resolveShortcutSequence(keys({ key: " " }, { key: "x" }), rules), null);
+  });
+
+  it("lets a later rule take a sequence from an earlier one", () => {
+    const overridden = [
+      ...rules,
+      ...compileResolvedKeybindingsConfig([{ key: "space t", command: "diff.toggle" }]),
+    ];
+    assert.deepEqual(resolveShortcutSequence(keys({ key: " " }, { key: "t" }), overridden), {
+      type: "complete",
+      command: "diff.toggle",
+    });
+  });
+
+  it("is never matched by a single key, and labels as its keys", () => {
+    assert.equal(
+      resolveShortcutCommand(event({ key: "g" }), rules, { context: { listFocus: true } }),
+      null,
+    );
+    assert.deepEqual(effectiveShortcutsForCommand(rules, "terminal.toggle"), []);
+    assert.equal(formatBindingLabel(rules[3]!, "Linux x86_64"), "Space T");
+    assert.equal(formatBindingLabel(rules[4]!, "MacIntel"), "\u2303W H");
+    assert.equal(shortcutLabelForCommand(rules, "terminal.toggle", "Linux x86_64"), "Space T");
   });
 });

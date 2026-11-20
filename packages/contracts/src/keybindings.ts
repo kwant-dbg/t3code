@@ -6,6 +6,8 @@ const MAX_KEYBINDING_WHEN_LENGTH = 256;
 export const MAX_WHEN_EXPRESSION_DEPTH = 64;
 export const MAX_SCRIPT_ID_LENGTH = 24;
 export const MAX_KEYBINDINGS_COUNT = 256;
+/** Keys in one sequence binding, such as `g g` (2) or `ctrl+w h` (2). */
+export const MAX_KEYBINDING_SEQUENCE_STEPS = 4;
 
 export const THREAD_JUMP_KEYBINDING_COMMANDS = [
   "thread.jump.1",
@@ -53,6 +55,54 @@ const MODEL_PICKER_KEYBINDING_COMMANDS = [
   "modelPicker.previousProvider",
   "modelPicker.nextProvider",
   ...MODEL_PICKER_JUMP_KEYBINDING_COMMANDS,
+] as const;
+
+/** Commands that vim mode binds by default; any of them can be bound without it too. */
+export const VIM_KEYBINDING_COMMANDS = [
+  "workspace.focusLeft",
+  "workspace.focusRight",
+  "workspace.focusUp",
+  "workspace.focusDown",
+  "workspace.leaveTerminal",
+  "composer.focus",
+  "list.next",
+  "list.previous",
+  "list.first",
+  "list.last",
+  "list.pageDown",
+  "list.pageUp",
+  "list.open",
+  "list.close",
+  "sidebar.renameThread",
+  "sidebar.archiveThread",
+  "sidebar.copyThreadReference",
+  "sidebar.search",
+  "conversation.next",
+  "conversation.previous",
+  "conversation.nextPrompt",
+  "conversation.previousPrompt",
+  "conversation.first",
+  "conversation.last",
+  "conversation.toggle",
+  "conversation.copy",
+  "scroll.lineDown",
+  "scroll.lineUp",
+  "scroll.halfPageDown",
+  "scroll.halfPageUp",
+  "scroll.top",
+  "scroll.bottom",
+  "chat.findNext",
+  "chat.findPrevious",
+  "diff.nextHunk",
+  "diff.previousHunk",
+  "diff.nextFile",
+  "diff.previousFile",
+  "diff.toggleFile",
+  "rightPanel.nextTab",
+  "rightPanel.previousTab",
+  "hints.click",
+  "hints.focus",
+  "keybindings.cheatSheet",
 ] as const;
 
 export const STATIC_KEYBINDING_COMMANDS = [
@@ -116,6 +166,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "usage.period.quarter",
   ...MODEL_PICKER_KEYBINDING_COMMANDS,
   ...THREAD_KEYBINDING_COMMANDS,
+  ...VIM_KEYBINDING_COMMANDS,
 ] as const;
 
 export const SCRIPT_RUN_COMMAND_PATTERN = Schema.TemplateLiteral([
@@ -207,7 +258,18 @@ export type KeybindingWhenNode =
 
 export const ResolvedKeybindingRule = Schema.Struct({
   command: KeybindingCommand,
+  /**
+   * For a sequence, a key no single keypress matches (the rule's text), so a client that
+   * predates sequences never runs the command on its first key.
+   */
   shortcut: KeybindingShortcut,
+  /** The keys of a multi-key binding such as `g g` or `space t`, pressed one after another. */
+  sequence: Schema.optional(
+    Schema.Array(KeybindingShortcut).check(
+      Schema.isMinLength(2),
+      Schema.isMaxLength(MAX_KEYBINDING_SEQUENCE_STEPS),
+    ),
+  ),
   whenAst: Schema.optional(KeybindingWhenNode),
 }).annotate({ parseOptions: { onExcessProperty: "ignore" } });
 export type ResolvedKeybindingRule = typeof ResolvedKeybindingRule.Type;

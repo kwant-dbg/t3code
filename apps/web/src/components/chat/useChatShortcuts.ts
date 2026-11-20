@@ -11,6 +11,8 @@ import { isInSideChatPane } from "../../lib/sideChatPane";
 import { getTerminalFocusOwner, type TerminalFocusOwner } from "../../lib/terminalFocus";
 import type { ComposerHandleRef } from "../../composerHandleContext";
 import type { BranchToolbarHandle } from "../BranchToolbar";
+import { registerCommandRunner } from "../../shortcuts/dispatcher";
+import { withVimKeybindings } from "../../vim/vimKeybindings";
 import { shouldTypeToFocusComposer } from "./composerFocusRedirect";
 import { composerShortcutCommands } from "./composerShortcuts";
 
@@ -61,7 +63,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
   const embedded = input.embedded === true;
   const composerElement = embedded ? (input.composerElement ?? null) : null;
   const handleShortcut = useEffectEvent((event: KeyboardEvent) => {
-    const { keybindings } = input;
+    const keybindings = withVimKeybindings(input.keybindings);
     if (preventRepeatedTerminalCloseShortcut(event, keybindings)) {
       event.stopPropagation();
       return;
@@ -129,6 +131,23 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     event.preventDefault();
     event.stopPropagation();
   });
+  const commandRunner = useEffectEvent((command: KeybindingCommand) => {
+    if (!input.enabled || isCommandPaletteOpen()) return undefined;
+    return (
+      input.commands[command] ??
+      composerShortcutCommands(input.composerRef, input.branchToolbarRef)[command] ??
+      input.fallback(command)
+    );
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- lets key sequences, such as vim's `space t`, run this chat's commands
+  useEffect(() => {
+    if (embedded) return;
+    return registerCommandRunner({
+      has: (command) => commandRunner(command) !== undefined,
+      run: (command, event) =>
+        commandRunner(command)?.({ event, terminalFocusOwner: getTerminalFocusOwner() }) !== false,
+    });
+  }, [embedded]);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- attaches keydown listeners for chat shortcuts and find dismissal: on the window, or on an embedded chat's composer
   useEffect(() => {
     if (embedded) {

@@ -52,6 +52,7 @@ import { isTestChangedFile } from "@t3tools/shared/changedFileKind";
 import { useHideTestFiles } from "./diffs/useHideTestFiles";
 import { useRenderedAppearance } from "../hooks/useTheme";
 import { useStableCallback } from "../hooks/useStableCallback";
+import { registerCommands } from "../shortcuts/dispatcher";
 import {
   buildFileDiffEntries,
   getDiffLineStat,
@@ -123,6 +124,30 @@ const AUTOMATIC_BASE_REF = "__automatic_base_ref__";
 const DIFF_FILE_TREE_STORAGE_KEY = "t3code.diffFileTreeOpen";
 
 const EMPTY_COLLAPSED_DIFF_FILE_KEYS: ReadonlySet<string> = new Set();
+
+/**
+ * The file being read: the one a previous step moved to while its header is still in view, since
+ * short files at the end cannot scroll to the top; otherwise the one at the top of the diff.
+ */
+function currentDiffFileKey(event: KeyboardEvent, stepped: string | null): string | null {
+  const panel =
+    event.target instanceof Element ? event.target.closest("[data-workspace-area]") : null;
+  const headers = Array.from(panel?.querySelectorAll<HTMLElement>("[data-diff-file-key]") ?? []);
+  if (!panel || headers.length === 0) return null;
+  const box = panel.getBoundingClientRect();
+  const steppedTop = headers
+    .find((header) => header.dataset.diffFileKey === stepped)
+    ?.getBoundingClientRect().top;
+  if (steppedTop !== undefined && steppedTop >= box.top && steppedTop < box.bottom) return stepped;
+  const top = box.top;
+  const nearest = headers.reduce((best, header) =>
+    Math.abs(header.getBoundingClientRect().top - top) <
+    Math.abs(best.getBoundingClientRect().top - top)
+      ? header
+      : best,
+  );
+  return nearest.dataset.diffFileKey ?? null;
+}
 
 function DiffFileCollapseToggle({
   filePath,
@@ -804,6 +829,35 @@ export default function DiffPanel({
       return next;
     });
   });
+
+  // Commands for moving through the diff by file from the keyboard, such as vim's `]f`.
+  const steppedFileKeyRef = useRef<string | null>(null);
+  const stepDiffFile = useStableCallback((event: KeyboardEvent, step: 1 | -1 | 0) => {
+    const current = currentDiffFileKey(event, steppedFileKeyRef.current);
+    if (current === null) return false;
+    event.preventDefault();
+    if (step === 0) {
+      toggleDiffFileCollapsed(current);
+      return true;
+    }
+    const index = renderableFileEntries.findIndex((file) => file.fileKey === current);
+    const next = renderableFileEntries[index + step];
+    if (next) {
+      steppedFileKeyRef.current = next.fileKey;
+      revealDiffFile(resolveFileDiffPath(next.fileDiff));
+    }
+    return true;
+  });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers the diff's file commands with the shortcut dispatcher
+  useEffect(
+    () =>
+      registerCommands({
+        "diff.nextFile": (event) => stepDiffFile(event, 1),
+        "diff.previousFile": (event) => stepDiffFile(event, -1),
+        "diff.toggleFile": (event) => stepDiffFile(event, 0),
+      }),
+    [stepDiffFile],
+  );
 
   const toggleDiffFileCollapse = () => {
     codeViewScroll.discard();

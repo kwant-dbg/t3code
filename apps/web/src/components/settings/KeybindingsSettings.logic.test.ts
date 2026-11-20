@@ -13,6 +13,7 @@ import {
   keybindingConflictLabels,
   keybindingFromKeyboardEvent,
   parseWhenExpressionDraft,
+  recordKeybindingStep,
   shortcutToKeybindingInput,
   unknownWhenVariables,
   whenAstToExpression,
@@ -311,5 +312,29 @@ describe("KeybindingsSettings.logic", () => {
     );
 
     expect(rows.map((row) => row.conflicts)).toEqual([[], []]);
+  });
+  it("records keys pressed within a second of each other as one sequence", () => {
+    const g = recordKeybindingStep(null, "g", 0);
+    const gg = recordKeybindingStep({ keys: g, at: 0 }, "g", 400);
+    expect(gg).toBe("g g");
+    expect(recordKeybindingStep({ keys: gg, at: 400 }, "t", 1500)).toBe("t");
+    expect(recordKeybindingStep({ keys: "a b c d", at: 0 }, "e", 10)).toBe("e");
+  });
+
+  it("shows sequences by their keys, counts vim's rules as defaults, and finds clashes", () => {
+    const rows = buildKeybindingRows(
+      compileResolvedKeybindingsConfig([
+        { command: "list.first", key: "g g", when: "vimNormal && !editableFocus && listFocus" },
+        { command: "chat.new", key: "g g", when: "vimNormal && !editableFocus && listFocus" },
+        { command: "terminal.toggle", key: "space t", when: "vimNormal && !editableFocus" },
+      ]),
+      "Linux x86_64",
+    );
+    const listFirst = rows.find((row) => row.command === "list.first");
+    expect(listFirst?.key).toBe("g g");
+    expect(listFirst?.source).toBe("Default");
+    expect(listFirst?.conflicts).toEqual(["Chat: New"]);
+    expect(rows.find((row) => row.command === "chat.new")?.source).toBe("Custom");
+    expect(rows.find((row) => row.command === "terminal.toggle")?.key).toBe("space t");
   });
 });

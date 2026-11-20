@@ -33,9 +33,13 @@ import {
   type ServerUpsertKeybindingInput,
 } from "@t3tools/contracts";
 import {
+  compileResolvedKeybindingsConfig,
+  mergeVimKeybindings,
   mergeWithDefaultKeybindings,
   parseKeybindingWhenExpression,
+  VIM_DEFAULT_KEYBINDINGS,
 } from "@t3tools/shared/keybindings";
+import { useClientSettings } from "~/hooks/useSettings";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
@@ -67,6 +71,7 @@ import {
   isKnownWhenVariable,
   keybindingConflictLabels,
   keybindingFromKeyboardEvent,
+  recordKeybindingStep,
   parseWhenExpressionDraft,
   groupKeybindingRows,
   type KeybindingCommandOption,
@@ -84,6 +89,18 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useAtomCommand } from "../../state/use-atom-command";
 
 function KeybindingPill({ value }: { value: string }) {
+  // A sequence such as `g g` shows each of its keys in turn.
+  const steps = value.split(" ").filter(Boolean);
+  if (steps.length > 1) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        {steps.map((step, index) => (
+          // oxlint-disable-next-line react/no-array-index-key -- a sequence may repeat a key
+          <KeybindingPill key={index} value={step} />
+        ))}
+      </span>
+    );
+  }
   // Keys dedupe repeated parts; a literal "+" in a shortcut splits into empty strings.
   const seenParts = new Map<string, number>();
   const parts = value.split("+").map((part) => {
@@ -779,10 +796,12 @@ function useKeybindingRowEditor({
     });
   };
 
+  const lastRecorded = useRef<{ keys: string; at: number } | null>(null);
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Tab" && !isRecording) return;
     event.preventDefault();
     if (event.key === "Escape") {
+      lastRecorded.current = null;
       // An unhandled Escape closes the settings page.
       event.stopPropagation();
       const field = event.currentTarget;
@@ -800,10 +819,12 @@ function useKeybindingRowEditor({
       else field.blur();
       return;
     }
-    const next = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform, {
+    const step = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform, {
       layoutCharacter: true,
     });
-    if (!next) return;
+    if (!step) return;
+    const next = recordKeybindingStep(lastRecorded.current, step, event.timeStamp);
+    lastRecorded.current = { keys: next, at: event.timeStamp };
     setKeyDraft(next, { isRecording: false });
   };
 
@@ -1170,20 +1191,24 @@ function useNewKeybindingDraft({
     });
   };
 
+  const lastRecorded = useRef<{ keys: string; at: number } | null>(null);
   const captureKeybinding = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Tab" && !isRecording) return;
     event.preventDefault();
     if (event.key === "Escape") {
+      lastRecorded.current = null;
       // An unhandled Escape closes the settings page.
       event.stopPropagation();
       setDraft({ keyDraft: "", isRecording: false });
       event.currentTarget.blur();
       return;
     }
-    const next = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform, {
+    const step = keybindingFromKeyboardEvent(event.nativeEvent, navigator.platform, {
       layoutCharacter: true,
     });
-    if (!next) return;
+    if (!step) return;
+    const next = recordKeybindingStep(lastRecorded.current, step, event.timeStamp);
+    lastRecorded.current = { keys: next, at: event.timeStamp };
     setDraft({ keyDraft: next, isRecording: false });
   };
 
@@ -1424,10 +1449,17 @@ function keybindingAnchorIds(rows: ReturnType<typeof buildKeybindingRows>) {
   return ids;
 }
 
+const selectVimMode = (settings: { vimMode: boolean }) => settings.vimMode;
+
 // Cache rows in a separate hook so the compiler does not rebuild them per search keystroke.
 function useKeybindingCatalog() {
   const serverKeybindings = useSettingsScope().environment?.serverConfig?.keybindings;
-  const merged = mergeWithDefaultKeybindings(serverKeybindings ?? []);
+  const vimMode = useClientSettings(selectVimMode);
+  const appKeybindings = mergeWithDefaultKeybindings(serverKeybindings ?? []);
+  // Vim's keys show, and can be changed, while vim mode is on.
+  const merged = vimMode
+    ? mergeVimKeybindings(compileResolvedKeybindingsConfig(VIM_DEFAULT_KEYBINDINGS), appKeybindings)
+    : appKeybindings;
   const m = useMessages();
   return {
     commandOptions: buildKeybindingCommandOptions(merged, m),

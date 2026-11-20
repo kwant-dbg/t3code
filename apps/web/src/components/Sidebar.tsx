@@ -96,6 +96,7 @@ import {
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
 import { isElectron } from "../env";
+import { registerCommands } from "../shortcuts/dispatcher";
 import {
   resolveShortcutCommand,
   shortcutLabelForCommand,
@@ -2612,6 +2613,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       position: { x: number; y: number },
       source: ContextMenuSource,
       fromSearch = false,
+      // An action chosen with a key binding instead of from the menu.
+      chosen?: "rename" | "archive" | "copy-thread",
     ) => {
       void (async () => {
         const api = readLocalApi();
@@ -2620,6 +2623,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         const selectionState = useThreadSelectionStore.getState();
         // Search results are not selectable rows, so they always act on their own thread.
         if (
+          chosen === undefined &&
           !fromSearch &&
           selectionState.hasSelection() &&
           selectionState.selectedThreadKeys.has(threadKey)
@@ -2657,46 +2661,50 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 projectRef.projectId === thread.projectId,
             ),
           ) ?? null;
+        // The menu offers no archive while a turn runs.
+        if (chosen === "archive" && !threadRuntimeCanArchive(thread.runtime)) return;
         const clicked = await settlePromise(() =>
-          api.contextMenu.show(
-            buildThreadActionMenuItems({
-              canOperate: readEnvironmentScope(
-                threadRef.environmentId,
-                AuthOrchestrationOperateScope,
+          chosen !== undefined
+            ? Promise.resolve(chosen)
+            : api.contextMenu.show(
+                buildThreadActionMenuItems({
+                  canOperate: readEnvironmentScope(
+                    threadRef.environmentId,
+                    AuthOrchestrationOperateScope,
+                  ),
+                  branch: thread.branch ?? null,
+                  // An archived project is not a filter choice.
+                  projectFilter:
+                    threadProjectGroup && !threadProjectGroup.archived
+                      ? {
+                          label: threadProjectGroup.displayName,
+                          isActive: projectScopeKeys.includes(threadProjectGroup.projectKey),
+                        }
+                      : null,
+                  isPinned,
+                  isSettled,
+                  autoSettleEnabled: thread.autoSettleDisabledAt == null,
+                  isSnoozed,
+                  canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
+                  isRegeneratingTitle,
+                  isRunning: !threadRuntimeCanArchive(thread.runtime),
+                  canShareWithGuest: appAtomRegistry.get(
+                    canShareWithGuestAtom(threadRef.environmentId),
+                  ),
+                  canTurnIntoProject: canTurnThreadIntoProject(threadRef),
+                  canRename: !fromSearch,
+                  supports: {
+                    settlement: configLoaded,
+                    autoSettleOptOut: supportsAutoSettleOptOut,
+                    snooze: configLoaded,
+                    pinning: configLoaded,
+                    titleRegeneration: configLoaded,
+                  },
+                  snoozePresets,
+                }),
+                position,
+                source,
               ),
-              branch: thread.branch ?? null,
-              // An archived project is not a filter choice.
-              projectFilter:
-                threadProjectGroup && !threadProjectGroup.archived
-                  ? {
-                      label: threadProjectGroup.displayName,
-                      isActive: projectScopeKeys.includes(threadProjectGroup.projectKey),
-                    }
-                  : null,
-              isPinned,
-              isSettled,
-              autoSettleEnabled: thread.autoSettleDisabledAt == null,
-              isSnoozed,
-              canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
-              isRegeneratingTitle,
-              isRunning: !threadRuntimeCanArchive(thread.runtime),
-              canShareWithGuest: appAtomRegistry.get(
-                canShareWithGuestAtom(threadRef.environmentId),
-              ),
-              canTurnIntoProject: canTurnThreadIntoProject(threadRef),
-              canRename: !fromSearch,
-              supports: {
-                settlement: configLoaded,
-                autoSettleOptOut: supportsAutoSettleOptOut,
-                snooze: configLoaded,
-                pinning: configLoaded,
-                titleRegeneration: configLoaded,
-              },
-              snoozePresets,
-            }),
-            position,
-            source,
-          ),
         );
         if (clicked._tag === "Failure" || clicked.value === null) return;
         if (threadActionRequiresOperate(clicked.value) && !checkThreadOperations([thread])) return;
@@ -2915,6 +2923,37 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     (threadRef: ScopedThreadRef, position: { x: number; y: number }, source: ContextMenuSource) =>
       handleThreadContextMenu(threadRef, position, source, true),
   );
+
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers commands for the focused thread row with the shortcut dispatcher
+  useEffect(() => {
+    const onFocusedThread =
+      (action: "rename" | "archive" | "copy-thread") => (event: KeyboardEvent) => {
+        const row = document.activeElement?.closest<HTMLElement>("[data-sidebar-row]");
+        const thread = row ? threadByKeyRef.current.get(row.dataset.sidebarRow ?? "") : undefined;
+        if (!thread) return false;
+        event.preventDefault();
+        handleThreadContextMenu(
+          scopeThreadRef(thread.environmentId, thread.id),
+          { x: 0, y: 0 },
+          "keyboard",
+          false,
+          action,
+        );
+        return true;
+      };
+    return registerCommands({
+      "sidebar.renameThread": onFocusedThread("rename"),
+      "sidebar.archiveThread": onFocusedThread("archive"),
+      "sidebar.copyThreadReference": onFocusedThread("copy-thread"),
+      "sidebar.search": (event) => {
+        const input = threadSearchInputRef.current;
+        if (!input) return false;
+        event.preventDefault();
+        input.focus();
+        return true;
+      },
+    });
+  }, [handleThreadContextMenu]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- subscribes to window keydown for thread navigation shortcuts using the current thread list
   useEffect(() => {

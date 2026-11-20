@@ -65,7 +65,11 @@ import {
 } from "./ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { appAtomRegistry } from "../rpc/atomRegistry";
-import { registerCommands, registerMenuAction } from "../shortcuts/dispatcher";
+import {
+  registerCommandRunner,
+  registerCommands,
+  registerMenuAction,
+} from "../shortcuts/dispatcher";
 import { resolveThreadRouteRef } from "../threadRoutes";
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "var(--desktop-window-controls-inset, 90px)";
@@ -370,9 +374,18 @@ function SidebarControl({ showSidebar }: { readonly showSidebar: boolean }) {
     const unsubscribe = window.desktopBridge?.onMenuAction((action) => {
       if (action === "sidebar.toggle") toggleSidebar();
     });
+    // Key sequences, such as vim's `space b`, run the toggle too.
+    const unregisterRunner = registerCommandRunner({
+      has: (command) => command === "sidebar.toggle",
+      run: () => {
+        toggleSidebar();
+        return true;
+      },
+    });
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
       unsubscribe?.();
+      unregisterRunner();
     };
   }, [keybindings, router, showSidebar, toggleSidebar, usagePageOpen]);
 

@@ -196,3 +196,27 @@ it("re-enables Save when a When editor closes on an expression it could not pars
   await expect.element(expression).toHaveValue("terminalFocus");
   await expect.element(screen.getByRole("button", { name: "Save" })).toBeEnabled();
 });
+
+it("records keys pressed one after another as a sequence", async () => {
+  const mutate = vi.fn(async () => ({ _tag: "Success", value: [] }));
+  await vi.mocked(atomCommands.useAtomCommand).withImplementation(
+    () => mutate as never,
+    async () => {
+      await using screen = await render(<KeybindingsSettingsPanel />);
+
+      await screen.getByRole("button", { name: /^Edit shortcut for Sidebar: Toggle:/ }).click();
+      await userEvent.keyboard("gb");
+      await expect.element(existingField).toHaveValue("g b");
+      await screen.getByRole("button", { name: "Save" }).click();
+
+      expect(mutate).toHaveBeenLastCalledWith({
+        environmentId: "env",
+        input: {
+          command: "sidebar.toggle",
+          key: "g b",
+          replace: { command: "sidebar.toggle", key: "mod+b" },
+        },
+      });
+    },
+  );
+});

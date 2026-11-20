@@ -127,6 +127,7 @@ export function ThreadFindBar(props: ThreadFindBarProps) {
             size="icon-xs"
             variant="ghost"
             aria-label={gt("Previous match")}
+            data-thread-find="previous"
             disabled={navigationDisabled}
             onClick={props.onPrevious}
           >
@@ -136,6 +137,7 @@ export function ThreadFindBar(props: ThreadFindBarProps) {
             size="icon-xs"
             variant="ghost"
             aria-label={gt("Next match")}
+            data-thread-find="next"
             disabled={navigationDisabled}
             onClick={props.onNext}
           >

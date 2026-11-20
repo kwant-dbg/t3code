@@ -72,8 +72,10 @@ dialog with your draft in it; `Tab` leaves the text box. Vim
 keeps only `Ctrl+R`, `Ctrl+A`, `Ctrl+X` and `Ctrl+[` for itself: `Cmd`
 shortcuts (`Ctrl` on Windows and Linux) and Ctrl shortcuts you bind in
 Keybindings work in every mode. The terminal and the browser preview keep every
-key. Vim mode is off on narrow mobile screens, while an on-screen keyboard is
-open, and in the mobile app.
+key. Vim mode also moves around the app outside text boxes; see
+[Move around with vim keys](./keyboard-focus.md#move-around-with-vim-keys).
+Vim mode is off on narrow mobile screens, while an on-screen keyboard is open,
+and in the mobile app.
 
 ## Attach files
 

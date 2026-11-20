@@ -493,6 +493,55 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
     }).pipe(Effect.provide(layerKeybindings())),
   );
 
+  it.effect("saves a key sequence and reads it back as a sequence", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, []);
+      const keybindings = yield* Keybindings.Keybindings;
+      const saved = yield* keybindings.upsertKeybindingRule({
+        key: "ctrl+w h",
+        command: "workspace.focusLeft",
+        when: "vimNormal",
+      });
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      assert.deepEqual(persisted.at(-1), {
+        key: "ctrl+w h",
+        command: "workspace.focusLeft",
+        when: "vimNormal",
+      });
+      const rule = saved.keybindings.find((entry) => entry.command === "workspace.focusLeft");
+      assert.deepEqual(
+        rule?.sequence?.map((step) => [step.key, step.ctrlKey]),
+        [
+          ["w", true],
+          ["h", false],
+        ],
+      );
+    }).pipe(Effect.provide(layerKeybindings())),
+  );
+
+  it.effect("keeps a vim command's other keys when one of them is removed", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig.ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, []);
+      const keybindings = yield* Keybindings.Keybindings;
+      const target = SharedKeybindings.VIM_DEFAULT_KEYBINDINGS.find(
+        (rule) => rule.command === "list.next" && rule.key === "j",
+      )!;
+      yield* keybindings.upsertKeybindingRule({ ...target, when: "false", replace: target });
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      assert.deepEqual(
+        persisted.filter((rule) => rule.command === "list.next"),
+        [
+          ...SharedKeybindings.VIM_DEFAULT_KEYBINDINGS.filter(
+            (rule) => rule.command === "list.next" && rule !== target,
+          ),
+          { ...target, when: "false" },
+        ],
+      );
+    }).pipe(Effect.provide(layerKeybindings())),
+  );
+
   it.effect("keeps entries it cannot decode when editing other keybindings", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

@@ -39,8 +39,9 @@ import {
   mergeWithDefaultKeybindings,
   compileResolvedKeybindingRule,
   compileResolvedKeybindingsConfig,
-  parseKeybindingShortcut,
+  parseKeybindingSequence,
   parseKeybindingWhenExpression,
+  VIM_DEFAULT_KEYBINDINGS,
 } from "@t3tools/shared/keybindings";
 
 export const ResolvedKeybindingFromConfig = KeybindingRule.pipe(
@@ -60,7 +61,7 @@ export const ResolvedKeybindingFromConfig = KeybindingRule.pipe(
         ),
 
       encode: Effect.fn("keybindings.encode")(function* (resolved) {
-        const key = encodeShortcut(resolved.shortcut);
+        const key = encodeSequence(resolved.sequence ?? [resolved.shortcut]);
         if (!key) {
           return yield* Effect.fail(
             new SchemaIssue.InvalidValue({
@@ -83,8 +84,8 @@ export const ResolvedKeybindingFromConfig = KeybindingRule.pipe(
 // Settings sends replace/remove targets in its own normalized spelling, which can differ from a
 // hand-edited file ("cmd+k" vs "meta+k", "a&&b" vs "a && b"), so compare parsed forms.
 function keybindingRuleIdentity(rule: KeybindingRule): string {
-  const shortcut = parseKeybindingShortcut(rule.key);
-  const key = (shortcut && encodeShortcut(shortcut)) ?? rule.key;
+  const steps = parseKeybindingSequence(rule.key);
+  const key = (steps && encodeSequence(steps)) ?? rule.key;
   if (rule.when === undefined) return JSON.stringify([rule.command, key, null]);
   const whenAst = parseKeybindingWhenExpression(rule.when);
   return JSON.stringify([rule.command, key, whenAst ? encodeWhenAst(whenAst) : rule.when]);
@@ -115,9 +116,9 @@ const LATE_DEFAULT_KEYBINDINGS: ReadonlyArray<{
 ];
 
 function keybindingShortcutContext(rule: KeybindingRule): string | null {
-  const parsed = parseKeybindingShortcut(rule.key);
+  const parsed = parseKeybindingSequence(rule.key);
   if (!parsed) return null;
-  const encoded = encodeShortcut(parsed);
+  const encoded = encodeSequence(parsed);
   if (!encoded) return null;
   return `${encoded}\u0000${rule.when ?? ""}`;
 }
@@ -153,6 +154,11 @@ function encodeShortcut(shortcut: KeybindingShortcut): string | null {
   if (shortcut.key !== "+" && shortcut.key.includes("+")) return null;
   const key = shortcut.key === " " ? "space" : shortcut.key;
   return [...modifiers, key].join("+");
+}
+
+function encodeSequence(steps: ReadonlyArray<KeybindingShortcut>): string | null {
+  const keys = steps.map(encodeShortcut);
+  return keys.every((key) => key !== null) ? keys.join(" ") : null;
 }
 
 function encodeWhenAst(node: KeybindingWhenNode): string {
@@ -673,10 +679,12 @@ const make = Effect.gen(function* () {
             rule.when === "false" &&
             replaceTarget &&
             !customConfig.some(({ rule: entry }) => entry?.command === rule.command)
-              ? DEFAULT_KEYBINDINGS.filter(
-                  (entry) =>
-                    entry.command === rule.command && !isSameKeybindingRule(entry, replaceTarget),
-                ).map((entry) => ({ value: entry, rule: entry }))
+              ? [...DEFAULT_KEYBINDINGS, ...VIM_DEFAULT_KEYBINDINGS]
+                  .filter(
+                    (entry) =>
+                      entry.command === rule.command && !isSameKeybindingRule(entry, replaceTarget),
+                  )
+                  .map((entry) => ({ value: entry, rule: entry }))
               : [];
           const retainedConfig = customConfig.filter(({ rule: entry }) => {
             if (!entry) return true;

@@ -1,5 +1,7 @@
 import {
+  MAX_KEYBINDING_SEQUENCE_STEPS,
   STATIC_KEYBINDING_COMMANDS,
+  VIM_KEYBINDING_COMMANDS,
   type KeybindingCommand,
   type KeybindingShortcut,
   type KeybindingWhenNode,
@@ -7,10 +9,12 @@ import {
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import {
+  compileResolvedKeybindingsConfig,
   DEFAULT_RESOLVED_KEYBINDINGS,
-  parseKeybindingShortcut,
+  parseKeybindingSequence,
   parseKeybindingWhenExpression,
   US_SHIFTED_TO_UNSHIFTED_KEYS,
+  VIM_DEFAULT_KEYBINDINGS,
 } from "@t3tools/shared/keybindings";
 import { msg } from "gt-react";
 
@@ -70,8 +74,14 @@ const CORE_WHEN_VARIABLES = [
   "false",
 ] as const;
 
+// The app's defaults and vim mode's: a rule equal to either is a default, not the user's own.
+const DEFAULT_BINDINGS = [
+  ...DEFAULT_RESOLVED_KEYBINDINGS,
+  ...compileResolvedKeybindingsConfig(VIM_DEFAULT_KEYBINDINGS),
+];
+
 const DEFAULT_WHEN_VARIABLES = new Set<string>(CORE_WHEN_VARIABLES);
-for (const binding of DEFAULT_RESOLVED_KEYBINDINGS) {
+for (const binding of DEFAULT_BINDINGS) {
   collectWhenIdentifiersFromNode(binding.whenAst, DEFAULT_WHEN_VARIABLES);
 }
 
@@ -90,6 +100,22 @@ export function shortcutToKeybindingInput(shortcut: KeybindingShortcut): string 
   if (shortcut.shiftKey) parts.push("shift");
   parts.push(shortcut.key === " " ? "space" : shortcut.key === "escape" ? "esc" : shortcut.key);
   return parts.join("+");
+}
+
+/** A binding's keys as keybindings.json writes them: `mod+k`, or `g g` for a sequence. */
+function bindingToKeybindingInput(
+  binding: Pick<ResolvedKeybindingRule, "shortcut" | "sequence">,
+): string {
+  return (binding.sequence ?? [binding.shortcut]).map(shortcutToKeybindingInput).join(" ");
+}
+
+function bindingConflictKey(
+  binding: Pick<ResolvedKeybindingRule, "shortcut" | "sequence">,
+  platform: string,
+): string {
+  return (binding.sequence ?? [binding.shortcut])
+    .map((step) => shortcutConflictKey(step, platform))
+    .join(" ");
 }
 
 export function whenAstToExpression(node: KeybindingWhenNode | undefined): string {
@@ -147,12 +173,12 @@ function sourceForBinding(binding: ResolvedKeybindingRule): KeybindingSource {
     return source;
   }
 
-  const bindingKey = shortcutToKeybindingInput(binding.shortcut);
+  const bindingKey = bindingToKeybindingInput(binding);
   const bindingWhen = whenAstToExpression(binding.whenAst);
-  const isDefault = DEFAULT_RESOLVED_KEYBINDINGS.some(
+  const isDefault = DEFAULT_BINDINGS.some(
     (entry) =>
       entry.command === binding.command &&
-      shortcutToKeybindingInput(entry.shortcut) === bindingKey &&
+      bindingToKeybindingInput(entry) === bindingKey &&
       whenAstToExpression(entry.whenAst) === bindingWhen,
   );
 
@@ -163,28 +189,27 @@ function sourceForBinding(binding: ResolvedKeybindingRule): KeybindingSource {
 function defaultBindingForBinding(
   binding: ResolvedKeybindingRule,
 ): ResolvedKeybindingRule | undefined {
-  const bindingKey = shortcutToKeybindingInput(binding.shortcut);
+  const bindingKey = bindingToKeybindingInput(binding);
   const bindingWhen = whenAstToExpression(binding.whenAst);
 
   return (
-    DEFAULT_RESOLVED_KEYBINDINGS.find(
+    DEFAULT_BINDINGS.find(
       (entry) =>
         entry.command === binding.command &&
-        shortcutToKeybindingInput(entry.shortcut) === bindingKey &&
+        bindingToKeybindingInput(entry) === bindingKey &&
         whenAstToExpression(entry.whenAst) === bindingWhen,
     ) ??
     (bindingWhen === "false"
-      ? DEFAULT_RESOLVED_KEYBINDINGS.find(
+      ? DEFAULT_BINDINGS.find(
           (entry) =>
-            entry.command === binding.command &&
-            shortcutToKeybindingInput(entry.shortcut) === bindingKey,
+            entry.command === binding.command && bindingToKeybindingInput(entry) === bindingKey,
         )
       : undefined) ??
-    DEFAULT_RESOLVED_KEYBINDINGS.find(
+    DEFAULT_BINDINGS.find(
       (entry) =>
         entry.command === binding.command && whenAstToExpression(entry.whenAst) === bindingWhen,
     ) ??
-    DEFAULT_RESOLVED_KEYBINDINGS.find((entry) => entry.command === binding.command)
+    DEFAULT_BINDINGS.find((entry) => entry.command === binding.command)
   );
 }
 
@@ -204,15 +229,18 @@ export function keybindingConflictLabels(
   resolve: MessageResolver = m,
 ): ReadonlyArray<string> {
   if (input.key.trim().length === 0) return [];
-  const shortcut = parseKeybindingShortcut(input.key);
-  if (!shortcut) return [];
+  const steps = parseKeybindingSequence(input.key);
+  if (!steps?.[0]) return [];
   // Compare resolved chords so mod+k and ctrl+k collide where mod is Ctrl.
-  const conflictKey = shortcutConflictKey(shortcut, platform);
+  const conflictKey = bindingConflictKey(
+    { shortcut: steps[0], ...(steps.length > 1 ? { sequence: steps } : {}) },
+    platform,
+  );
   const conflicts: Array<string> = [];
   for (const candidate of rows) {
     if (
       candidate.id !== input.rowId &&
-      shortcutConflictKey(candidate.binding.shortcut, platform) === conflictKey &&
+      bindingConflictKey(candidate.binding, platform) === conflictKey &&
       conflictsWithWhen(candidate.when, input.when)
     ) {
       conflicts.push(commandLabel(candidate.command, resolve));
@@ -235,6 +263,11 @@ const KEYBINDING_GROUPS = [
   },
   { id: "threads", title: msg("Threads"), prefixes: ["thread", "chat", "pullRequest"] },
   { id: "composer", title: msg("Composer"), prefixes: ["composer", "modelPicker"] },
+  {
+    id: "moving",
+    title: msg("Moving around"),
+    prefixes: ["workspace", "list", "scroll", "conversation", "hints", "keybindings"],
+  },
   { id: "terminal", title: msg("Terminal"), prefixes: ["terminal"] },
   { id: "preview", title: msg("Preview & diff"), prefixes: ["preview", "diff"] },
   {
@@ -281,7 +314,7 @@ export function buildKeybindingRows(
   const rowsById = new Map<string, KeybindingRow>();
   for (const binding of keybindings) {
     const defaultBinding = defaultBindingForBinding(binding);
-    const key = shortcutToKeybindingInput(binding.shortcut);
+    const key = bindingToKeybindingInput(binding);
     const when = whenAstToExpression(binding.whenAst);
     const id = keybindingRowId(binding.command, key, when);
     rowsById.set(id, {
@@ -293,8 +326,8 @@ export function buildKeybindingRows(
       isUnassigned:
         when === "false" &&
         defaultBinding !== undefined &&
-        key === shortcutToKeybindingInput(defaultBinding.shortcut),
-      defaultKey: defaultBinding ? shortcutToKeybindingInput(defaultBinding.shortcut) : null,
+        key === bindingToKeybindingInput(defaultBinding),
+      defaultKey: defaultBinding ? bindingToKeybindingInput(defaultBinding) : null,
       defaultWhen: whenAstToExpression(defaultBinding?.whenAst),
       binding,
       conflicts: [],
@@ -488,6 +521,53 @@ const LATE_COMMAND_LABELS: Partial<Record<KeybindingCommand, string>> = {
   "preview.find": msg("Preview: Find on Page"),
 };
 
+const VIM_COMMAND_LABELS: Record<(typeof VIM_KEYBINDING_COMMANDS)[number], string> = {
+  "workspace.focusLeft": msg("Focus Workspace Area to the Left"),
+  "workspace.focusRight": msg("Focus Workspace Area to the Right"),
+  "workspace.focusUp": msg("Focus Workspace Area Above"),
+  "workspace.focusDown": msg("Focus Workspace Area Below"),
+  "workspace.leaveTerminal": msg("Leave the Terminal or Browser Page"),
+  "composer.focus": msg("Composer: Focus"),
+  "list.next": msg("List: Next Item"),
+  "list.previous": msg("List: Previous Item"),
+  "list.first": msg("List: First Item"),
+  "list.last": msg("List: Last Item"),
+  "list.pageDown": msg("List: Half Page Down"),
+  "list.pageUp": msg("List: Half Page Up"),
+  "list.open": msg("List: Open or Expand"),
+  "list.close": msg("List: Collapse"),
+  "sidebar.renameThread": msg("Sidebar: Rename Thread"),
+  "sidebar.archiveThread": msg("Sidebar: Archive Thread"),
+  "sidebar.copyThreadReference": msg("Sidebar: Copy Thread Link"),
+  "sidebar.search": msg("Sidebar: Search Threads"),
+  "conversation.next": msg("Conversation: Next Message"),
+  "conversation.previous": msg("Conversation: Previous Message"),
+  "conversation.nextPrompt": msg("Conversation: Next Prompt"),
+  "conversation.previousPrompt": msg("Conversation: Previous Prompt"),
+  "conversation.first": msg("Conversation: First Message"),
+  "conversation.last": msg("Conversation: Last Message"),
+  "conversation.toggle": msg("Conversation: Expand or Collapse"),
+  "conversation.copy": msg("Conversation: Copy Message"),
+  "scroll.lineDown": msg("Scroll: Line Down"),
+  "scroll.lineUp": msg("Scroll: Line Up"),
+  "scroll.halfPageDown": msg("Scroll: Half Page Down"),
+  "scroll.halfPageUp": msg("Scroll: Half Page Up"),
+  "scroll.top": msg("Scroll: Top"),
+  "scroll.bottom": msg("Scroll: Bottom"),
+  "chat.findNext": msg("Chat: Next Match"),
+  "chat.findPrevious": msg("Chat: Previous Match"),
+  "diff.nextHunk": msg("Diff: Next Hunk"),
+  "diff.previousHunk": msg("Diff: Previous Hunk"),
+  "diff.nextFile": msg("Diff: Next File"),
+  "diff.previousFile": msg("Diff: Previous File"),
+  "diff.toggleFile": msg("Diff: Fold or Unfold File"),
+  "rightPanel.nextTab": msg("Right Panel: Next Tab"),
+  "rightPanel.previousTab": msg("Right Panel: Previous Tab"),
+  "hints.click": msg("Hints: Click a Control"),
+  "hints.focus": msg("Hints: Focus a Control"),
+  "keybindings.cheatSheet": msg("Keybindings: Show Cheat Sheet"),
+};
+
 export function commandLabel(command: KeybindingCommand, resolve: MessageResolver = m): string {
   const label = COMMAND_LABELS[command];
   if (label) return resolve(label);
@@ -495,6 +575,8 @@ export function commandLabel(command: KeybindingCommand, resolve: MessageResolve
   if (usageLabel) return resolve(usageLabel);
   const lateLabel = LATE_COMMAND_LABELS[command];
   if (lateLabel) return resolve(lateLabel);
+  const vimLabel = VIM_COMMAND_LABELS[command as keyof typeof VIM_COMMAND_LABELS];
+  if (vimLabel) return resolve(vimLabel);
   const raw = String(command);
   if (raw.startsWith("thread.jump.")) {
     return resolve(msg("Thread: Jump: {n}", { n: raw.slice("thread.jump.".length) }));
@@ -562,6 +644,20 @@ function normalizeShortcutKeyToken(key: string): string | null {
   }
   if (normalized === "pageup" || normalized === "pagedown") return normalized;
   return null;
+}
+
+/** Keys recorded within a second of each other, vim's `timeoutlen`, make one sequence. */
+const KEYBINDING_SEQUENCE_RECORD_MS = 1000;
+
+/** The recorded binding after another key: the next step of a sequence, or a new binding. */
+export function recordKeybindingStep(
+  previous: { readonly keys: string; readonly at: number } | null,
+  step: string,
+  at: number,
+): string {
+  if (!previous || at - previous.at > KEYBINDING_SEQUENCE_RECORD_MS) return step;
+  if (previous.keys.split(" ").length >= MAX_KEYBINDING_SEQUENCE_STEPS) return step;
+  return `${previous.keys} ${step}`;
 }
 
 export function keybindingFromKeyboardEvent(

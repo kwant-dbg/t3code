@@ -21,6 +21,7 @@ import {
 import { isElectron } from "./env";
 import { isEditableFocused } from "./lib/editableFocus";
 import { projectScriptIdFromCommand } from "./projectScripts";
+import { readVimContext } from "./vim/vimKeybindings";
 
 export type { ShortcutModifierStateLike } from "@t3tools/shared/keybindings";
 export { shortcutKeyFromEvent } from "@t3tools/shared/keybindings";
@@ -67,6 +68,7 @@ function resolveContext(options: ShortcutMatchOptions | undefined): ShortcutMatc
     isWeb: !isElectron,
     isDesktop: isElectron,
     editableFocus: false,
+    ...readVimContext(options?.context ?? {}),
     ...options?.context,
   };
 }
@@ -141,7 +143,7 @@ export function effectiveShortcutsForCommand(
 
   for (let index = keybindings.length - 1; index >= 0; index -= 1) {
     const binding = keybindings[index];
-    if (!binding) continue;
+    if (!binding || binding.sequence) continue;
     if (!matchesWhenClause(binding.whenAst, context)) continue;
 
     const shortcut = shortcutForContext(binding, context);
@@ -189,12 +191,58 @@ export function resolveShortcutCommand(
 
   for (let index = keybindings.length - 1; index >= 0; index -= 1) {
     const binding = keybindings[index];
-    if (!binding) continue;
+    if (!binding || binding.sequence) continue;
     if (!matchesWhenClause(binding.whenAst, context)) continue;
     if (!matchesKeybindingShortcut(event, shortcutForContext(binding, context), platform)) continue;
     return binding.command;
   }
   return null;
+}
+
+export type ShortcutSequenceMatch =
+  | { readonly type: "complete"; readonly command: KeybindingCommand }
+  /** The keys so far start one or more sequences; `next` is what each waits for. */
+  | {
+      readonly type: "partial";
+      readonly next: ReadonlyArray<{
+        readonly step: KeybindingShortcut;
+        readonly command: KeybindingCommand;
+      }>;
+    }
+  | null;
+
+/** Keys pressed one after another against sequence bindings; later rules win, as for one key. */
+export function resolveShortcutSequence(
+  events: ReadonlyArray<ShortcutEventLike>,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): ShortcutSequenceMatch {
+  const platform = resolvePlatform(options);
+  const context = resolveContext(options);
+  const last = events.at(-1);
+  if (options?.context?.editableFocus === undefined && typeof document !== "undefined") {
+    context.editableFocus = isEditableFocused(last?.target ?? document.activeElement);
+  }
+  const next: Array<{ step: KeybindingShortcut; command: KeybindingCommand }> = [];
+  const waiting = new Set<string>();
+  for (let index = keybindings.length - 1; index >= 0; index -= 1) {
+    const binding = keybindings[index];
+    const sequence = binding?.sequence;
+    if (!binding || !sequence || sequence.length < events.length) continue;
+    if (!matchesWhenClause(binding.whenAst, context)) continue;
+    const typed = events.every((event, step) =>
+      matchesKeybindingShortcut(event, sequence[step]!, platform),
+    );
+    if (!typed) continue;
+    if (sequence.length === events.length) return { type: "complete", command: binding.command };
+    const step = sequence[events.length]!;
+    // A later rule on the same next key shadows an earlier one.
+    const key = shortcutConflictKey(step, platform);
+    if (waiting.has(key)) continue;
+    waiting.add(key);
+    next.push({ step, command: binding.command });
+  }
+  return next.length > 0 ? { type: "partial", next } : null;
 }
 
 export function resolveChatShortcutCommand(
@@ -251,6 +299,16 @@ export function formatShortcutLabel(
   return parts.join("+");
 }
 
+/** `G G`, `Space T`, or `⌃W H`: each key of a sequence, in order. */
+export function formatBindingLabel(
+  binding: Pick<ResolvedKeybindingRule, "shortcut" | "sequence">,
+  platform = navigator.platform,
+): string {
+  return (binding.sequence ?? [binding.shortcut])
+    .map((step) => formatShortcutLabel(step, platform))
+    .join(" ");
+}
+
 export function shortcutLabelForCommand(
   keybindings: ResolvedKeybindingsConfig,
   command: KeybindingCommand | null,
@@ -263,7 +321,16 @@ export function shortcutLabelForCommand(
       : options;
   const platform = resolvePlatform(resolvedOptions);
   const shortcut = findEffectiveShortcutForCommand(keybindings, command, resolvedOptions);
-  return shortcut ? formatShortcutLabel(shortcut, platform) : null;
+  if (shortcut) return formatShortcutLabel(shortcut, platform);
+  // A command bound only to a sequence, such as `space t`, shows its keys in order.
+  const context = resolveContext(resolvedOptions);
+  const sequence = keybindings.findLast(
+    (binding) =>
+      binding.command === command &&
+      binding.sequence !== undefined &&
+      matchesWhenClause(binding.whenAst, context),
+  );
+  return sequence ? formatBindingLabel(sequence, platform) : null;
 }
 
 export function threadJumpCommandForIndex(index: number): ThreadJumpKeybindingCommand | null {

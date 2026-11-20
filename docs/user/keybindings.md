@@ -54,6 +54,20 @@ boxes switches to vim's Normal mode once no menu or suggestion claims it. A
 binding of yours on `Ctrl+R`, `Ctrl+A`, `Ctrl+X` or `Ctrl+[` takes priority over
 vim's use of that key. See [Vim mode](./composer.md#vim-mode).
 
+## Vim keys
+
+Vim mode's keys for moving around the app, such as `j` in a list or `space t`
+for the terminal, are ordinary keybindings. While vim mode is on they appear in
+**Settings → Keybindings** and the command palette, and you change or unassign
+them like any default. They are not written to `keybindings.json`, so they never
+count toward its 256 rules; only a vim key you change is saved there. Press `?`
+outside a text box for a sheet of the vim keys as you have them bound. See
+[Move around with vim keys](./keyboard-focus.md#move-around-with-vim-keys).
+
+A key that already runs a shortcut keeps it. On Windows and Linux, where Ctrl is
+the app's main modifier, that includes `Ctrl+W`, `Ctrl+D`, `Ctrl+O`, `Ctrl+N` and
+`Ctrl+P`; use `F6` to move between areas, or bind the vim commands to other keys.
+
 These shortcuts run inside the focused web or desktop client. `mod` uses Command
 on macOS and Ctrl on Windows and Linux, including GNOME, KDE Plasma, Niri, and
 Hyprland. If a custom desktop shortcut takes the same keys, choose another binding
@@ -129,6 +143,12 @@ Join modifiers and a key with `+`, such as `mod+shift+d` or `ctrl+l`.
 `mod` means Command on macOS and Control elsewhere. Other modifiers are
 `cmd` / `meta`, `ctrl` / `control`, `alt` / `option`, and `shift`.
 
+Separate keys pressed one after another with spaces: `g g`, `space t`, or
+`ctrl+w h`, up to four keys. After the first key, a hint lists what can follow;
+the keys wait a second for the next one. A key that already runs a shortcut does
+not start a sequence, and a plain key never does while you type in a text field.
+To record a sequence in **Settings → Keybindings**, press its keys in turn.
+
 ## When conditions
 
 Available context keys are `terminalFocus`, `terminalOpen`, `previewFocus`,
@@ -140,6 +160,12 @@ In a thread, `rightPanelOpen` is true while its right panel is open; the default
 `editableFocus` is true while a text field, the composer, or another editor has
 the keyboard. `isWeb` is true in a browser tab. `isDesktop` is true in the
 desktop app. Unknown keys evaluate to `false`.
+
+While vim mode is on, `vimMode` is true, and `vimNormal` is true when you are
+not typing: no text box has focus, or the focused one is in Normal mode.
+`sidebarFocus`, `conversationFocus` and `rightPanelFocus` say which area has
+focus, `listFocus` that a list or menu does, and `popupOpen` that a picker,
+menu or dialog does.
 
 `mod+1` through `mod+9` jump to the first nine threads, and to models while the
 model picker is open. The thread jumps do not run while the model picker is open.

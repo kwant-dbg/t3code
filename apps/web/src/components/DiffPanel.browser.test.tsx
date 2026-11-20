@@ -46,9 +46,14 @@ const state = vi.hoisted(() => ({
   checkpointDiff: null as { diff: string } | null,
 }));
 
-vi.mock("~/state/server", () => ({
-  serverEnvironment: { configValueAtom: () => state.config },
-}));
+vi.mock("~/state/server", async () => {
+  const { Atom } = await import("effect/reactivity");
+  return {
+    serverEnvironment: { configValueAtom: () => state.config },
+    // The diff's file commands register with the shortcut dispatcher, which reads these.
+    primaryServerKeybindingsAtom: Atom.make([]),
+  };
+});
 vi.mock("~/state/review", () => ({
   reviewEnvironment: {
     diffPreview: ({ input }: { input: { baseRef?: string } }) =>

@@ -17,6 +17,12 @@ browser preview's input, must set `data-vim="off"`; the terminal is skipped by i
 The composer is a Tiptap editor with its own adapter. Both load from
 [`apps/web/src/vim`](../../apps/web/src/vim) only when the setting is on.
 
+Vim's app keys are a client-side layer of ordinary rules (`VIM_DEFAULT_KEYBINDINGS`), merged under
+the user's only while the setting is on. They never reach `keybindings.json` or the wire, so the
+256-rule cap stays the user's, and the server's startup sync must not learn them. A sequence rule
+such as `g g` still carries a `shortcut`, set to a key no keypress produces, so a client that
+predates sequences drops it rather than running it on the first key.
+
 ## Styles
 
 Style with Tailwind classes in the component that renders the element.
