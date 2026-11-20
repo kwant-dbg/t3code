@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
 import { render } from "../../test/render";
+import { attachSidebarTree } from "~/lib/sidebarTree";
 import { startWorkspaceFocus, workspaceAreaProps } from "~/lib/workspaceFocus";
 import { startVimNavigation } from "./navigation";
 import { setVimModeOn } from "./vimKeybindings";
@@ -37,6 +39,35 @@ function Workspace({ onSend = () => {} }: { onSend?: () => void }) {
         </button>
       </main>
     </div>
+  );
+}
+
+function ThreadTree({ onOpen }: { onOpen: (name: string) => void }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <nav {...workspaceAreaProps("sidebar", 0, "Sidebar")} ref={attachSidebarTree}>
+      <button
+        type="button"
+        data-sidebar-row="project"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+        data-testid="project"
+      >
+        project
+      </button>
+      {["one", "two"].map((name) => (
+        <button
+          key={name}
+          type="button"
+          data-sidebar-row={name}
+          data-sidebar-parent="project"
+          onClick={() => onOpen(name)}
+          data-testid={name}
+        >
+          {name}
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -76,6 +107,20 @@ describe("vim navigation", () => {
 
     await userEvent.keyboard("{Control>}w{/Control}l");
     await vi.waitFor(() => expect(focusedArea()).toBe("conversation"));
+  });
+
+  it("opens a sidebar row with l and expands a collapsed group instead", async () => {
+    const onOpen = vi.fn();
+    await using screen = await mount(<ThreadTree onOpen={onOpen} />);
+
+    screen.getByTestId("two").element().focus();
+    await userEvent.keyboard("l");
+    expect(onOpen).toHaveBeenCalledWith("two");
+
+    screen.getByTestId("project").element().focus();
+    await userEvent.keyboard("l");
+    await expect.element(screen.getByTestId("project")).toHaveAttribute("aria-expanded", "true");
+    expect(onOpen).toHaveBeenCalledOnce();
   });
 
   it("labels the visible controls with f and clicks the one whose label is typed", async () => {

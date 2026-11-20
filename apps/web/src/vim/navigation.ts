@@ -442,7 +442,9 @@ export function startVimNavigation(): () => void {
       "list.open": handled(() => {
         const target = activeElement();
         if (!target) return false;
-        if (!press(target, "ArrowRight")) target.click();
+        // Only groups and submenus expand. The sidebar claims ArrowRight on a thread row too
+        // (it moves to the row's children), so a row without aria-expanded opens instead.
+        if (!target.hasAttribute("aria-expanded") || !press(target, "ArrowRight")) target.click();
         return true;
       }),
       "list.close": handled(() => {
